@@ -2,10 +2,12 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MToonMaterialLoaderPlugin, VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import { MToonNodeMaterial } from '@pixiv/three-vrm/nodes';
+import { createLife, type IdleName } from './life';
+import { createMemory, type Memory } from './memory';
 import { markBodyParts } from './parts';
 import { createPoser, type Mood } from './pose';
 import { createReactor, type Zone } from './react';
-import { rng } from '../core/random';
+import { createWind } from './wind';
 
 export interface Look {
   x: number; // куда повернуть голову: −1 слева … 1 справа от персонажа
@@ -27,13 +29,35 @@ export interface Actor {
    * drillR, body, handL, handR, armL, armR. К ним привязываются подписи и предметы.
    */
   points: Record<string, THREE.Vector3>;
-  update(dt: number, t: number, look: Look, camera: THREE.Camera, mood: Mood): void;
+  update(dt: number, t: number, look: Look, camera: THREE.PerspectiveCamera, mood: Mood): void;
   /** Что у персонажа под этой точкой экрана (координаты −1…1), если что-то есть. */
   hit?(ndcX: number, ndcY: number, camera: THREE.PerspectiveCamera): Zone | null;
   /** Клик по персонажу: запускает реакцию и возвращает зону, в которую попали. */
   poke?(ndcX: number, ndcY: number, camera: THREE.PerspectiveCamera): Zone | null;
   /** Запустить реакцию напрямую, без попадания по экрану. */
   react?(zone: Zone, offset: number): void;
+  /**
+   * Точка в мире, на которую ей может быть интересно посмотреть. Вес от 1 — «посмотри
+   * сейчас» (держится, пока вызов повторяют); меньше 1 — точка попадает в список, из
+   * которого она сама изредка выбирает, куда глянуть; 0 — убрать из списка.
+   * Вектор хранится по ссылке: предмет может двигаться. Подробнее — actor/life.ts.
+   */
+  interest?(point: THREE.Vector3 | null, weight?: number): void;
+  /**
+   * Запустить жест по имени: shift, yawn, stretch, hand, hair, sigh, knock, wave, wary;
+   * bored — заскучать до первого движения указателя.
+   * @returns false, если сейчас идёт другой жест
+   */
+  idle?(name: IdleName): boolean;
+  /**
+   * Внешний ветер по волосам и одежде (вентилятор): направление в мире и сила,
+   * 1 — крепкий поток. Держится, пока не сменят; сила 0 — выключить.
+   */
+  wind?(direction: THREE.Vector3, strength: number): void;
+  /** Вызывается в кадре, когда она стукнула костяшками в «стекло» экрана; точка — в мире. */
+  onKnock?: ((at: THREE.Vector3) => void) | null;
+  /** Что она помнит о посетителе (actor/memory.ts). Только этот браузер. */
+  memory?: Memory;
   /** Вернуть всё к состоянию сразу после загрузки: инерцию, моргание, реакции, волосы. */
   reset?(): void;
   /** Для отладки из консоли в dev-сборке. */
@@ -113,10 +137,17 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
   // Кость головы стоит у основания черепа; центр лица примерно на 8 см выше.
   const headY = (head ? head.getWorldPosition(new THREE.Vector3()).y : 1.32) + 0.08;
 
-  let blinkIn = 2.5;
-  let blink = 0;
   const yaw = { v: 0 };
   const pitch = { v: 0 };
+
+  // ── мелкая жизнь, память, ветер ───────────────────────────────────────
+  const life = createLife();
+  const memory = createMemory();
+  // Гладили в прошлый раз — машет, доводили — косится. Сброс (reset) приветствие отменяет.
+  life.greet(memory.standing === 'kind' ? 'wave' : memory.standing === 'wary' ? 'wary' : null);
+  const wind = createWind(vrm);
+  const seen = { x: 0, y: 0, ready: false }; // где указатель был кадр назад
+  let chapterNow = 0;
 
   // ── реакции на клик ───────────────────────────────────────────────────
   const reactor = createReactor();
@@ -127,6 +158,8 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
   const rawHandR = raw('rightMiddleProximal') ?? raw('rightHand');
   const rawArmL = raw('leftUpperArm');
   const rawArmR = raw('rightUpperArm');
+  const rawHips = raw('hips');
+  const hipsPos = new THREE.Vector3(0, 0.86, 0);
   // Поворот головы считаем относительно исходного, чтобы зоны «ехали» вместе с ней.
   const headRestInv = rawHead
     ? rawHead.getWorldQuaternion(new THREE.Quaternion()).invert()
@@ -172,6 +205,7 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
     rawHandR?.getWorldPosition(zones.handR.pos);
     rawArmL?.getWorldPosition(points.armL);
     rawArmR?.getWorldPosition(points.armR);
+    rawHips?.getWorldPosition(hipsPos);
   }
 
   const inView = new THREE.Vector3();
@@ -200,95 +234,110 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
     return best ? { zone: best, offset } : null;
   }
 
-  // Пружинные кости боковых локонов: за них можно «дёрнуть».
-  // Запоминаем их штатную гравитацию, чтобы вернуть после толчка.
-  const KICK_POWER = 2.4;
-  const ringlets: { joint: { settings: { gravityPower: number; gravityDir: THREE.Vector3 } }; power: number; dir: THREE.Vector3 }[][] = [[], []];
-  const kicked = [false, false];
-  if (vrm.springBoneManager && rawHead) {
-    const hp = rawHead.getWorldPosition(new THREE.Vector3());
-    const p = new THREE.Vector3();
-    for (const joint of vrm.springBoneManager.joints) {
-      joint.bone.getWorldPosition(p);
-      const dx = p.x - hp.x;
-      const dy = p.y - hp.y;
-      if (Math.abs(dx) > 0.09 && dy > -0.3 && dy < 0.25) {
-        ringlets[dx > 0 ? 0 : 1].push({
-          joint,
-          power: joint.settings.gravityPower,
-          dir: joint.settings.gravityDir.clone(),
-        });
-      }
-    }
-  }
-  function kick(i: 0 | 1, on: boolean) {
-    if (on === kicked[i]) return;
-    kicked[i] = on;
-    const sign = i === 0 ? 1 : -1;
-    for (const r of ringlets[i]) {
-      if (on) {
-        r.joint.settings.gravityDir.set(sign * 0.9, 0.5, 0.25).normalize(); // наружу и вверх
-        r.joint.settings.gravityPower = KICK_POWER;
-      } else {
-        r.joint.settings.gravityDir.copy(r.dir);
-        r.joint.settings.gravityPower = r.power;
-      }
-    }
-  }
-
   const away = new THREE.Vector3();
+  const hands: [THREE.Vector3, THREE.Vector3] = [zones.handL.pos, zones.handR.pos];
+  const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
-  return {
+  const actor: Actor = {
     kind: 'vrm',
     root: vrm.scene,
     headY,
     face: zones.face.pos,
     cheeks,
     points,
-    debug: { vrm, lookTarget, poser, reactor, zones },
+    memory,
+    onKnock: null,
+    debug: { vrm, lookTarget, poser, reactor, zones, life, wind },
     hit(ndcX, ndcY, camera) {
       return find(ndcX, ndcY, camera)?.zone ?? null;
     },
     poke(ndcX, ndcY, camera) {
       const found = find(ndcX, ndcY, camera);
       if (!found) return null;
-      reactor.trigger(found.zone, found.offset);
+      const kind = reactor.trigger(found.zone, found.offset);
+      // Запоминаются только настоящие клики: react() из контрольных кадров память не трогает.
+      if (kind === 'sulk') memory.note('sulk');
+      else if (kind === 'joy') memory.note('joy');
+      else if (kind === 'top') memory.note('pat');
       return found.zone;
     },
     react(zone, offset) {
       reactor.trigger(zone, offset);
     },
+    interest(point, weight) {
+      life.interest(point, weight);
+    },
+    idle(name) {
+      return life.trigger(name, chapterNow);
+    },
+    wind(direction, strength) {
+      wind?.set(direction, strength);
+    },
     reset() {
       yaw.v = 0;
       pitch.v = 0;
-      blinkIn = 2.5;
-      blink = 0;
+      seen.ready = false;
       reactor.reset();
+      life.reset(); // и приветствие тоже: после сброса она всегда нейтральна
       poser?.reset();
-      kick(0, false);
-      kick(1, false);
+      wind?.reset();
       vrm.springBoneManager?.reset();
     },
     update(dt, t, look, camera, mood) {
       const react = reactor.update(dt);
-      const attend = 1 - react.ignore; // обиделась — на курсор не смотрит
+      const still = mood.still ?? false;
+      chapterNow = mood.chapter;
+
+      // Скорость указателя, высот экрана в секунду: быстрый взмах перед лицом забирает внимание.
+      const speed =
+        seen.ready && dt > 1e-4
+          ? Math.hypot(((look.ndcX - seen.x) / 2) * camera.aspect, (look.ndcY - seen.y) / 2) / dt
+          : 0;
+      seen.x = look.ndcX;
+      seen.y = look.ndcY;
+      seen.ready = true;
+
+      const live = life.update(dt, {
+        idle: mood.idle ?? 0,
+        still,
+        press: mood.press,
+        busy: reactor.busy,
+        chapter: mood.chapter,
+        speed,
+        eye: camera.position,
+        face: zones.face.pos,
+        hands,
+      });
+      // Обиделась — на курсор не смотрит; заскучала — следит вполглаза.
+      const attend = (1 - react.ignore) * live.attend;
+      if (head) head.getWorldPosition(headPos);
 
       const k = 1 - Math.exp(-dt * 6);
       // В покое голова развёрнута к камере (та облетает персонажа от главы к главе),
       // а за курсором поворачивается не до конца: остаток угла добирают глаза.
       const toCamera = Math.atan2(camera.position.x, camera.position.z) * 0.85;
-      yaw.v += (toCamera + look.x * 0.3 * attend + react.awayYaw * react.ignore - yaw.v) * k;
-      pitch.v += (-look.y * 0.16 * attend - pitch.v) * k;
+      let yawTo = toCamera + look.x * 0.3 * attend + react.awayYaw * react.ignore;
+      let pitchTo = -look.y * 0.16 * attend;
+      // Отвела взгляд — голова идёт следом, но не до конца: остальное добирают глаза.
+      const glance = live.gaze * (1 - react.ignore);
+      if (glance > 0.001) {
+        away.copy(live.gazeAt).sub(headPos);
+        const follow = glance * live.gazeHead;
+        yawTo += (Math.atan2(away.x, away.z) * 0.6 - yawTo) * follow;
+        pitchTo += (-Math.atan2(away.y, Math.hypot(away.x, away.z)) * 0.5 - pitchTo) * follow;
+      }
+      yaw.v += (yawTo - yaw.v) * k;
+      pitch.v += (pitchTo - pitch.v) * k;
 
       // Точка под курсором: луч из камеры через курсор, точка на нём близко к лицу.
       // Даже небольшой сдвиг курсора заметно уводит взгляд, а когда курсор на лице,
       // точка лежит между лицом и камерой — получается взгляд в зрителя.
       // К этой же точке в последней главе тянется рука.
       aim.set(look.ndcX, look.ndcY, 0.5).unproject(camera).sub(camera.position).normalize();
-      if (head) head.getWorldPosition(headPos);
       lookTarget
         .copy(camera.position)
         .addScaledVector(aim, camera.position.distanceTo(headPos) * 0.8);
+      if (glance > 0.001) lookTarget.lerp(live.gazeAt, glance);
       if (react.ignore > 0.001) {
         // Демонстративно смотрит в сторону.
         away.set(Math.sin(react.awayYaw) * 2, headPos.y + 0.15, Math.cos(react.awayYaw) * 2);
@@ -296,56 +345,65 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
       }
 
       // Поза главы, дыхание, перенос веса, руки.
-      const pose = poser?.update(dt, t, mood, lookTarget, react, camera.position);
-      const tilt = (pose?.tilt ?? 0) + react.headRoll;
+      const pose = poser?.update(dt, t, mood, lookTarget, react, camera.position, live);
+      const tilt = (pose?.tilt ?? 0) + react.headRoll + live.headRoll;
 
       // Голова поворачивается за линзой, шея берёт на себя треть.
       // Корпус в позе может быть развёрнут — голова это компенсирует.
       const bodyTurn = (pose?.turn ?? 0) * 0.9;
       const bodyLean = (pose?.lean ?? 0) * 0.8;
-      const hy = yaw.v - bodyTurn + react.headYaw;
-      const hp = pitch.v - bodyLean + react.headPitch;
+      const hy = yaw.v - bodyTurn + react.headYaw + live.headYaw;
+      const hp = pitch.v - bodyLean + react.headPitch + live.headPitch;
       if (neck) neck.rotation.set(flip * hp * 0.35, hy * 0.35, flip * tilt * 0.4);
       if (head) head.rotation.set(flip * hp * 0.65, hy * 0.65, flip * (tilt * 0.6 - hy * 0.08));
       if (vrm.lookAt) {
         // lookAt() считает угол до цели относительно головы. В модели этот угол
         // ослаблен: 90° на входе дают всего 8–12° поворота зрачка, поэтому усиливаем.
         vrm.lookAt.lookAt(lookTarget);
-        vrm.lookAt.yaw = THREE.MathUtils.clamp(vrm.lookAt.yaw * EYE_GAIN, -90, 90);
-        vrm.lookAt.pitch = THREE.MathUtils.clamp(vrm.lookAt.pitch * EYE_GAIN, -90, 90);
+        // Поверх усиления — микросаккады: зрачок мелко перескакивает около цели.
+        vrm.lookAt.yaw = THREE.MathUtils.clamp(vrm.lookAt.yaw * EYE_GAIN + live.eyeYaw, -90, 90);
+        vrm.lookAt.pitch = THREE.MathUtils.clamp(vrm.lookAt.pitch * EYE_GAIN + live.eyePitch, -90, 90);
       }
 
-      // Моргание раз в несколько секунд.
-      blinkIn -= dt;
-      if (blinkIn <= 0) {
-        blink = 1;
-        blinkIn = 2 + rng() * 4;
-      }
-      blink = Math.max(0, blink - dt * 7);
       const face = pose?.face ?? { relaxed: 0.3, happy: 0, surprised: 0, wink: 0 };
       const em = vrm.expressionManager;
       if (em) {
-        // Реакция на клик глушит лицо самой позы и ставит своё.
+        // Лицо в три слоя: поза главы, поверх неё мелкая жизнь (зевок, скука, привет),
+        // поверх всего — реакция на клик. Верхний слой глушит нижние.
+        const base = 1 - live.calm;
         const own = 1 - react.calm;
-        const surprised = Math.max(face.surprised * own, react.surprised);
+        const surprised = Math.max(clamp01(face.surprised + live.surprised) * own, react.surprised);
         // От удивления глаза не моргают; подмигивание занимает один глаз целиком.
         const calm = 1 - surprised;
-        const wink = face.wink * own;
-        em.setValue('blink', Math.max(Math.sin(blink * Math.PI) * calm * (1 - wink), react.blink));
+        const wink = face.wink * base * own;
+        // Моргание и веки, прикрытые надолго (скука, зевок); под реакцией на клик веки её.
+        const lids = Math.max(live.blink, clamp01(live.lids) * own);
+        em.setValue('blink', Math.max(lids * calm * (1 - wink), react.blink));
         em.setValue('blinkRight', wink * calm * (1 - react.blink));
-        em.setValue('relaxed', Math.min(1, face.relaxed * own + react.relaxed) * calm);
-        em.setValue('happy', Math.min(1, face.happy * own + react.happy) * calm);
-        em.setValue('angry', react.angry * calm);
+        em.setValue('relaxed', Math.min(1, clamp01(face.relaxed * base + live.relaxed) * own + react.relaxed) * calm);
+        em.setValue('happy', Math.min(1, clamp01(face.happy * base + live.happy) * own + react.happy) * calm);
+        em.setValue('angry', Math.min(1, live.angry * own + react.angry) * calm);
+        em.setValue('sad', clamp01(live.sad) * own * calm);
+        em.setValue('aa', clamp01(live.mouth) * own);
         em.setValue('Surprised', surprised);
       }
 
-      kick(0, react.kick[0] > 0);
-      kick(1, react.kick[1] > 0);
+      // Ветер и рывки локонов — это настройки пружинных костей, их надо выставить до шага.
+      wind?.kick(0, react.kick[0] > 0);
+      wind?.kick(1, react.kick[1] > 0);
+      wind?.update(dt, t, { ndcX: look.ndcX, ndcY: look.ndcY, head: zones.face.pos, hips: hipsPos, still }, camera);
 
-      vrm.update(dt); // пружинные кости волос считаются здесь
+      // Пружинные кости волос и юбки считаются здесь. Их шаг не длиннее 1/45 с: при
+      // редких кадрах (dt до 0.05) один длинный шаг делает пряди дёргаными, а под
+      // ветром — ещё и нервными. При 60 кадрах в секунду шаг один, как и раньше.
+      const substeps = Math.max(1, Math.ceil(dt * 45 - 1e-3));
+      for (let i = 0; i < substeps; i++) vrm.update(dt / substeps);
       locate(); // зоны и центр лица — по уже обновлённым костям
+
+      if (live.knock) actor.onKnock?.(zones.handR.pos);
     },
   };
+  return actor;
 }
 
 class Ringlet extends THREE.Curve<THREE.Vector3> {
