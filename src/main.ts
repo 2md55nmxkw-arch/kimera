@@ -56,11 +56,14 @@ async function boot() {
   renderer.toneMapping = THREE.NoToneMapping;
   if (!staged) guardDevice(renderer, () => delete root.dataset.ready);
   // Контрольные кадры всегда снимаются в полном качестве.
-  const quality = createQuality(staged ? 'high' : levelFrom(params.get('q')));
+  const quality = createQuality(levelFrom(params.get('q')) ?? (staged ? 'high' : null));
 
-  const stage = createStage();
+  // Настоящие тени — со среднего уровня качества (уровень запомнен с прошлого визита).
+  const shadows = quality.atLeast('medium');
+  renderer.shadowMap.enabled = shadows;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const stage = createStage(shadows);
   const { scene, camera } = stage;
-  tag(scene, ID.stage);
 
   // Ход загрузки модели виден заставке: переменная --load на <html>, 0…1.
   const actor = await loadActor(`${import.meta.env.BASE_URL}models/teto.vrm`, (loaded) =>
@@ -69,7 +72,6 @@ async function boot() {
   root.style.setProperty('--load', '1');
   tag(actor.root, ID.actor);
   scene.add(actor.root);
-  stage.setHeadHeight(actor.headY);
 
   const u = createUniforms(camera);
   const scenePass = createScenePass(scene, camera);
@@ -194,7 +196,7 @@ async function boot() {
     for (const part of parts) part.step?.(frame);
 
     placeCamera(camera, frame, actor.headY, debugView);
-    stage.update(still ? 0 : dt, t);
+    stage.step(frame);
     actor.update(
       dt,
       t,

@@ -83,6 +83,8 @@ export interface SkinContext {
   normalAt(uv: N): N; // нормаль в пространстве камеры
   /** Метки: r — номер предмета, g — ярус тела, b — рука. */
   idAt(uv: N): N;
+  /** 1 на персонаже и предметах, 0 на стенах, полу и в пустоте (см. ID в core/gbuffer.ts). */
+  isFigureAt(uv: N): N;
 
   uv: N; // точка экрана, 0…1 от левого верхнего угла
   res: N; // размер буфера в пикселях
@@ -118,6 +120,7 @@ export function createContext(scenePass: N, u: SkinUniforms): SkinContext {
   const colorAt = (p: N): N => colorTex.sample(p).level(0);
   const normalAt = (p: N): N => normalTex.sample(p).level(0);
   const idAt = (p: N): N => idTex.sample(p).level(0);
+  const isFigureAt = (p: N): N => step(1.5, idAt(p).r);
 
   // Глубину three и так читает без выбора уровня (текстура без фильтрации), а с
   // явным уровнем собирает для WebGL неверный шейдер — поэтому здесь без .level(0).
@@ -165,6 +168,7 @@ export function createContext(scenePass: N, u: SkinUniforms): SkinContext {
     colorAt,
     normalAt,
     idAt,
+    isFigureAt,
     uv,
     res,
     css,

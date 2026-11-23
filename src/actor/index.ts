@@ -113,6 +113,8 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
   VRMUtils.rotateVRM0(vrm); // модели VRM 0.x смотрят в обратную сторону
   vrm.scene.traverse((o) => {
     o.frustumCulled = false;
+    // Тень отбрасывает, но на себя не принимает: рисованному лицу она только вредит.
+    o.castShadow = true;
   });
   markBodyParts(vrm); // ярус и рука в каждой вершине — для слоя меток G-буфера
 

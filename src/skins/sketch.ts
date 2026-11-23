@@ -63,7 +63,7 @@ export function createSketchDraw(index: number, freeze: { draw: number }): Part 
 }
 
 export function sketchSkin(c: SkinContext): N {
-  const { u, uv, css, pxUV, pxH, asp, colorAt, normalAt, viewDist, cross, lin, fg, fromHead, heads } = c;
+  const { u, uv, css, pxUV, pxH, asp, colorAt, normalAt, isFigureAt, viewDist, cross, lin, fg, fromHead, heads } = c;
 
   const boil: N = floor(u.clock.mul(8.0)).div(8.0).mul(3.1);
   /** Дрожание руки: смещение в CSS-пикселях. */
@@ -147,7 +147,9 @@ export function sketchSkin(c: SkinContext): N {
 
   // Штриховка: редкая и лёгкая, только чтобы наметить тень. Штрихи короткие,
   // у каждого своя толщина, линии слегка гуляют.
-  const tone: N = luminance(srgb(lin)).toVar();
+  // На стенах и полу декорации штрихуется только настоящая тень: ровно освещённая
+  // стена остаётся чистой бумагой, иначе рисунок тонет в штриховке.
+  const tone: N = mix(saturate(luminance(srgb(lin)).mul(1.55)), luminance(srgb(lin)), isFigureAt(uv)).toVar();
   const hatchAt: N = css.add(jitter(0.006, 5.0, 2.0));
   const hatch = (angle: number, spacing: number, width: number, salt: number, gaps: number): N => {
     const r: N = rot(hatchAt, angle);

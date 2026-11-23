@@ -30,7 +30,7 @@ import { hash22, paint, pick, srgb, toLinear, type N, type SkinContext } from '.
 const JEWELS = ['#b01e3c', '#1d409c', '#0f7a5c', '#e09a22', '#5a3192', '#14808c'];
 
 export function mosaicSkin(c: SkinContext): N {
-  const { u, uv, css, asp, toUV, colorAt, viewDist, isFg, edgeAt } = c;
+  const { u, uv, css, asp, toUV, colorAt, isFigureAt, edgeAt } = c;
 
   const voronoi = (tile: number, salt: number) => {
     const g: N = css.div(tile);
@@ -60,8 +60,9 @@ export function mosaicSkin(c: SkinContext): N {
   };
   const fine = voronoi(12, 0);
   const coarse = voronoi(34, 7.5);
-  const onFigure: N = isFg(viewDist(fine.at)).toVar(); // этот мелкий осколок лежит на фигуре
-  const besideFigure: N = isFg(viewDist(fine.beside)); // соседний мелкий — на фигуре
+  // Фигура — персонаж и предметы; стены и пол декорации — то же стекло розы, что и пустота.
+  const onFigure: N = isFigureAt(fine.at).toVar(); // этот мелкий осколок лежит на фигуре
+  const besideFigure: N = isFigureAt(fine.beside); // соседний мелкий — на фигуре
 
   // Стекло фигуры: цвет модели, насыщеннее и в несколько ступеней.
   const fc: N = srgb(colorAt(fine.at).rgb);

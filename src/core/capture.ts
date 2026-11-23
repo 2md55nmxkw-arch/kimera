@@ -23,8 +23,8 @@ export interface Rig {
   camera: THREE.PerspectiveCamera;
   actor: Actor;
   pointer: { x: number; y: number; tx: number; ty: number; press: number; pressTarget: number };
-  /** Ручные подмены: draw ≥ 0 останавливает ход рисования наброска. */
-  debugView: { draw: number };
+  /** Ручные подмены: своя камера и draw ≥ 0, останавливающий ход рисования наброска. */
+  debugView: { draw: number; on: boolean; pos: number[]; target: number[] };
   u: { raw: { value: number } };
   resizeTo(width: number, height: number, dpr: number): void;
   resize(): void;
@@ -47,6 +47,8 @@ export interface Shot {
   raw?: number;
   /** Сколько секунд указатель «никто не трогал». */
   idle?: number;
+  /** Своя камера вместо обычной: откуда и куда смотреть, метры. */
+  view?: { pos: number[]; target: number[] };
   size?: [number, number];
   /** Сколько шагов по 1/60 с отсчитать перед снимком (по умолчанию 150). */
   frames?: number;
@@ -113,6 +115,8 @@ function pose(rig: Rig, shot: Shot): void {
   const press = shot.press ?? 0;
   Object.assign(rig.pointer, { x, y, tx: x, ty: y, press, pressTarget: press });
   rig.debugView.draw = shot.draw ?? -1;
+  rig.debugView.on = Boolean(shot.view);
+  if (shot.view) Object.assign(rig.debugView, shot.view);
   rig.u.raw.value = shot.raw ?? 0;
   const frames = shot.frames ?? 150;
   for (let f = 0; f < frames; f++) {
@@ -124,6 +128,7 @@ function pose(rig: Rig, shot: Shot): void {
 /** Вернуть всё как было до съёмки. */
 function restore(rig: Rig): void {
   rig.debugView.draw = -1;
+  rig.debugView.on = false;
   rig.u.raw.value = 0;
   rig.reset();
   rig.resize();

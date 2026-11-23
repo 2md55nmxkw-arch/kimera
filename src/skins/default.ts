@@ -31,8 +31,9 @@ export function defaultSkin(c: SkinContext): N {
   for (const t of cross(pxUV.mul(9.0))) shadow = shadow.add(isFg(viewDist(uv.add(cast).add(t))));
   shadow = shadow.add(isFg(viewDist(uv.add(cast)))).div(5.0);
 
-  const light: N = exp(heads.mul(heads).mul(-0.11)); // пятно света за головой
-  const wall: N = mix(paint('#aeb2c0'), paint('#f6f1e8'), saturate(light.mul(0.85).add(float(1).sub(uv.y).mul(0.3))));
+  // Там, где декорации нет, — темнота за сценой с едва заметным светом за головой.
+  const light: N = exp(heads.mul(heads).mul(-0.11));
+  const wall: N = mix(paint('#121116'), paint('#2b2832'), saturate(light.mul(0.85).add(float(1).sub(uv.y).mul(0.3))));
   const backdrop: N = toLinear(
     wall
       .mul(float(1).sub(shadow.mul(0.16)))

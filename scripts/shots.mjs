@@ -42,7 +42,9 @@ const server = await createServer({ root, logLevel: 'warn', server: { port: 5199
 await server.listen();
 const port = server.httpServer.address().port;
 const only = args.find((a) => a.startsWith('--only='))?.slice(7);
-const url = `http://localhost:${port}/?${perf ? 'perf' : 'shots'}=${set}${webgl ? '&webgl' : ''}${only ? `&only=${only}` : ''}`;
+// --q=low|medium|high — снять или замерить на другом уровне качества.
+const q = args.find((a) => a.startsWith('--q='))?.slice(4);
+const url = `http://localhost:${port}/?${perf ? 'perf' : 'shots'}=${set}${webgl ? '&webgl' : ''}${only ? `&only=${only}` : ''}${q ? `&q=${q}` : ''}`;
 // Флаги графики можно подменить целиком: SHOTS_GPU_FLAGS="--use-angle=vulkan …"
 const gpuFlags = process.env.SHOTS_GPU_FLAGS?.split(' ').filter(Boolean) ?? [
   '--ignore-gpu-blocklist',
