@@ -125,6 +125,12 @@ async function boot() {
     onScreen.copy(world).project(camera);
     out.set((onScreen.x + 1) / 2, (1 - onScreen.y) / 2);
   };
+  // Стукнула в «стекло» изнутри — по нему расходится такое же кольцо, как от клика.
+  const knockAt = new THREE.Vector2();
+  actor.onKnock = (at) => {
+    toScreen(at, knockAt);
+    trail.splash(knockAt.x, knockAt.y);
+  };
   let shownChapter = -1;
   let t = 0;
 
@@ -199,7 +205,7 @@ async function boot() {
         ndcY: 1 - pointer.y * 2,
       },
       camera,
-      { chapter: s, press: pointer.press },
+      { chapter: s, press: pointer.press, idle: frame.idle, still },
     );
 
     // Где на экране лицо и какого оно размера: вокруг него строится витражная роза,

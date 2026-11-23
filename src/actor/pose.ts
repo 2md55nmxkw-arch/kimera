@@ -10,6 +10,7 @@
 // пальцы понемногу шевелятся, а у некоторых поз есть свой жест.
 import * as THREE from 'three/webgpu';
 import type { VRM } from '@pixiv/three-vrm';
+import type { ArmOver, Life } from './life';
 import type { Reaction } from './react';
 
 type V3 = [number, number, number];
@@ -45,7 +46,7 @@ export interface Pose {
   face: { relaxed: number; happy: number; surprised: number; wink: number };
 }
 
-const REST: ArmPose = {
+export const REST: ArmPose = {
   hand: [0.185, 0.862, 0.03],
   elbow: [0.5, 0, -1],
   twist: 0,
@@ -58,17 +59,17 @@ const REST: ArmPose = {
   grasp: 0,
 };
 
-const arm = (over: Partial<ArmPose>): ArmPose => ({ ...REST, ...over });
+export const arm = (over: Partial<ArmPose>): ArmPose => ({ ...REST, ...over });
 
 // Позы рук для реакций на клик: подмешиваются поверх позы главы.
-const GUARD_LEFT = arm({
+export const GUARD_LEFT = arm({
   hand: [0.035, 1.1, 0.15],
   elbow: [0.6, -0.8, 0.1],
   wrist: [0, -0.08, 0.16],
   fingers: [0.3, 0.2, 0.25, 0.3, 0.36],
 });
-const GUARD_RIGHT = arm({ ...GUARD_LEFT, hand: [0.035, 1.16, 0.135] });
-const AKIMBO = arm({
+export const GUARD_RIGHT = arm({ ...GUARD_LEFT, hand: [0.035, 1.16, 0.135] });
+export const AKIMBO = arm({
   hand: [0.165, 0.965, 0.02],
   elbow: [1, 0, -0.45],
   wrist: [0, 0, 0.3],
@@ -139,7 +140,7 @@ const X_AXIS = new THREE.Vector3(1, 0, 0);
 const FAN = [0, -1, -0.15, 0.5, 1];
 const SOFT = [0, 0.05, 0.07, 0.11, 0.17];
 
-function mixArm(out: ArmPose, a: ArmPose, b: ArmPose, t: number) {
+export function mixArm(out: ArmPose, a: ArmPose, b: ArmPose, t: number) {
   for (let i = 0; i < 3; i++) {
     out.hand[i] = lerp(a.hand[i], b.hand[i], t);
     out.elbow[i] = lerp(a.elbow[i], b.elbow[i], t);
@@ -154,7 +155,7 @@ function mixArm(out: ArmPose, a: ArmPose, b: ArmPose, t: number) {
   out.grasp = lerp(a.grasp, b.grasp, t);
 }
 
-const blankArm = (): ArmPose => ({
+export const blankArm = (): ArmPose => ({
   hand: [0, 0, 0],
   elbow: [0, 0, 0],
   twist: 0,
@@ -170,6 +171,8 @@ const blankArm = (): ArmPose => ({
 export interface Mood {
   chapter: number; // дробный номер главы из прокрутки
   press: number; // 0…1, насколько зажата кнопка мыши
+  idle?: number; // сколько секунд указатель никто не трогал
+  still?: boolean; // «уменьшение движения»: сама она ничего не затевает
 }
 
 export interface Poser {
@@ -179,6 +182,7 @@ export interface Poser {
    * @param lookPoint точка под курсором, мир
    * @param react     текущая реакция на клик
    * @param eye       положение камеры — к ней тянется ладонь в «дай пять»
+   * @param life      мелкая жизнь (actor/life.ts): жесты от скуки, приветствие
    */
   update(
     dt: number,
@@ -187,6 +191,7 @@ export interface Poser {
     lookPoint: THREE.Vector3,
     react: Reaction,
     eye: THREE.Vector3,
+    life?: Life,
   ): Pose;
   /** Сбросить инерцию рук и пальцев: следующая поза встанет сразу. */
   reset(): void;
@@ -330,6 +335,7 @@ export function createPoser(vrm: VRM): Poser | null {
   const qU = new THREE.Quaternion();
   const qL = new THREE.Quaternion();
   const qTmp = new THREE.Quaternion();
+  const stride = new THREE.Vector3(); // на сколько тело сейчас шагнуло к зрителю, мир
 
   function solveArm(
     rig: ArmRig,
@@ -340,13 +346,15 @@ export function createPoser(vrm: VRM): Poser | null {
     look: THREE.Vector3,
     push: number,
     eye: THREE.Vector3,
+    over: ArmOver | null,
   ) {
     const { side, upper, lower } = rig;
     const seed = side * 1.9; // чтобы руки не двигались синхронно
     upper.getWorldPosition(S);
 
     // Цель запястья: из позы, плюс лёгкий дрейф, плюс вздрагивание при нажатии.
-    T.set(p.hand[0] * side, p.hand[1], p.hand[2]);
+    // Позы записаны для тела, стоящего на месте; шагнула вперёд — цель едет с ней.
+    T.set(p.hand[0] * side, p.hand[1], p.hand[2]).add(stride);
     T.x += Math.sin(t * 0.7 + seed) * 0.006;
     T.y += Math.sin(t * 0.9 + seed * 2) * 0.006 + press * 0.035 + Math.sin(t * 2.2) * 0.006 * p.wave;
     T.z += press * 0.02;
@@ -363,6 +371,15 @@ export function createPoser(vrm: VRM): Poser | null {
       T.lerp(reach, reaching);
     }
 
+    if (over && over.aim > 0.001) {
+      // Жест «к стеклу»: рука идёт к зрителю, но со сдвигом вбок и вверх,
+      // чтобы кисть встала рядом с лицом, а не закрыла его.
+      reach.copy(eye).sub(S).normalize().multiplyScalar((rig.l1 + rig.l2) * over.aimReach);
+      reach.x += over.aimSide * side;
+      reach.y += over.aimUp;
+      T.lerp(reach.add(S), over.aim);
+    }
+
     if (push > 0.001) {
       // «Дай пять»: ладонь выбрасывается навстречу зрителю.
       reach.copy(eye).sub(S);
@@ -376,8 +393,8 @@ export function createPoser(vrm: VRM): Poser | null {
       rig.prev.copy(T);
       rig.ready = true;
     }
-    // Реакции резче обычных переходов между позами.
-    rig.target.lerp(T, 1 - Math.exp(-dt * (7 + push * 14)));
+    // Реакции резче обычных переходов между позами; жест может попросить о том же (стук).
+    rig.target.lerp(T, 1 - Math.exp(-dt * (7 + push * 14 + (over?.quick ?? 0) * 24)));
     if (dt > 1e-4) {
       // Скорость кисти, слегка сглаженная.
       S.copy(rig.target).sub(rig.prev).divideScalar(dt);
@@ -485,7 +502,7 @@ export function createPoser(vrm: VRM): Poser | null {
         for (const s of [...rig.curl, rig.spread, ...rig.wrist]) s.reset();
       }
     },
-    update(dt, t, mood, lookPoint, react, eye) {
+    update(dt, t, mood, lookPoint, react, eye, life) {
       // Поза главы: смесь двух соседних по прокрутке.
       const last = POSES.length - 1;
       const s = clamp(mood.chapter, 0, last);
@@ -505,6 +522,12 @@ export function createPoser(vrm: VRM): Poser | null {
       cur.face.surprised = lerp(a.face.surprised, b.face.surprised, f);
       cur.face.wink = lerp(a.face.wink, b.face.wink, f);
 
+      // Мелкая жизнь: жест поверх позы главы. Реакция на клик ляжет ещё выше.
+      if (life) {
+        if (life.arm[0].w > 0.001) mixArm(cur.left, cur.left, life.arm[0].pose, life.arm[0].w);
+        if (life.arm[1].w > 0.001) mixArm(cur.right, cur.right, life.arm[1].pose, life.arm[1].w);
+      }
+
       // Реакции на клик: руки к груди или в боки поверх позы главы.
       if (react.guard > 0.001) {
         mixArm(cur.left, cur.left, GUARD_LEFT, react.guard);
@@ -520,28 +543,34 @@ export function createPoser(vrm: VRM): Poser | null {
       // Живое тело: дыхание и медленный перенос веса с ноги на ногу.
       const breath = Math.sin(t * 1.5);
       const weight = Math.sin(t * 0.45) * 0.6 + Math.sin(t * 0.23 + 1.3) * 0.4;
-      const roll = cur.roll + weight * 0.018;
-      const lean = cur.lean - press * 0.07 + react.lean + breath * 0.006;
-      const turn = cur.turn + Math.sin(t * 0.31) * 0.02;
+      const roll = cur.roll + weight * 0.018 + (life?.roll ?? 0);
+      const lean = cur.lean - press * 0.07 + react.lean + breath * 0.006 + (life?.lean ?? 0);
+      const turn = cur.turn + Math.sin(t * 0.31) * 0.02 + (life?.turn ?? 0);
+
+      // Шаг к зрителю: всё тело едет к камере. Ступней в кадре нет, поэтому ноги не переставляем.
+      const step = life?.step ?? 0;
+      if (step > 1e-4) stride.set(eye.x, 0, eye.z).normalize().multiplyScalar(step);
+      else stride.set(0, 0, 0);
 
       hips.position.set(
-        hipsRest.x + roll * 0.35 * flip,
-        hipsRest.y - Math.abs(roll) * 0.05 + breath * 0.002 + react.bob,
-        hipsRest.z,
+        hipsRest.x + (roll * 0.35 + stride.x) * flip,
+        hipsRest.y - Math.abs(roll) * 0.05 + breath * 0.002 + react.bob + (life?.bob ?? 0),
+        hipsRest.z + stride.z * flip,
       );
       setEuler(hips, 0, turn * 0.3, roll);
       setEuler(spine, lean * 0.5, turn * 0.3, -roll * 0.6);
       setEuler(chest, lean * 0.3 - breath * 0.012, turn * 0.2, -roll * 0.3);
       setEuler(upperChest, lean * 0.2 - breath * 0.01, turn * 0.2, 0);
 
-      const shrug = cur.shrug + press * 0.14 + react.shrug + breath * 0.012;
+      const shrug = cur.shrug + press * 0.14 + react.shrug + breath * 0.012 + (life?.shrug ?? 0);
       for (const rig of arms) setEuler(rig.shoulder, 0, 0, shrug, rig.side);
 
       // Дальше нужны мировые положения плеч уже с учётом корпуса.
       hips.updateMatrixWorld(true);
       for (const rig of arms) {
         const left = rig.side === 1;
-        solveArm(rig, left ? cur.left : cur.right, dt, t, press, lookPoint, react.push[left ? 0 : 1], eye);
+        const i = left ? 0 : 1;
+        solveArm(rig, left ? cur.left : cur.right, dt, t, press, lookPoint, react.push[i], eye, life ? life.arm[i] : null);
       }
 
       cur.face.surprised = Math.min(1, cur.face.surprised + press);

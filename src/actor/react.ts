@@ -52,18 +52,18 @@ const zero = (): Reaction => ({
   kick: [0, 0],
 });
 
-const smoothstep = (a: number, b: number, x: number) => {
+export const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
 };
 /** Резкий всплеск: быстро вверх за attack, потом затухает. */
-const pulse = (t: number, attack: number, decay: number) =>
+export const pulse = (t: number, attack: number, decay: number) =>
   t < 0 ? 0 : t < attack ? t / attack : Math.exp(-(t - attack) / decay);
 /** Плато от a до b с мягкими краями. */
-const hold = (t: number, a: number, b: number, fade: number) =>
+export const hold = (t: number, a: number, b: number, fade: number) =>
   smoothstep(a, a + fade, t) * (1 - smoothstep(b - fade, b, t));
 
-type Kind = Zone | 'sulk' | 'joy';
+export type Kind = Zone | 'sulk' | 'joy';
 
 const DURATION: Record<Kind, number> = {
   face: 1.5,
@@ -100,12 +100,13 @@ export function createReactor() {
       recent.length = 0;
     },
 
-    trigger(zone: Zone, offset: number) {
+    /** @returns какая реакция началась; null — обижена и не отвечает */
+    trigger(zone: Zone, offset: number): Kind | null {
       recent.push({ zone, at: clock });
       while (recent.length && clock - recent[0].at > 4.5) recent.shift();
       const count = (z: Zone) => recent.filter((r) => r.zone === z).length;
 
-      if (kind === 'sulk') return; // обиделась — не реагирует, пока не отойдёт
+      if (kind === 'sulk') return null; // обиделась — не реагирует, пока не отойдёт
       if (zone === 'face' && count('face') >= 4) {
         kind = 'sulk';
         recent.length = 0;
@@ -117,6 +118,7 @@ export function createReactor() {
       }
       age = 0;
       side = offset;
+      return kind;
     },
 
     update(dt: number): Reaction {
