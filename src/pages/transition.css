@@ -1,0 +1,54 @@
+/* Переход между страницами сайта (главная ↔ программка ↔ 404).
+   Новая страница ложится поверх старой, как лист на стол: косой край идёт справа
+   налево, старая под ним чуть темнеет и отъезжает. Работает там, где браузер умеет
+   переходы между документами; в остальных страница просто открывается.
+   Правило должно быть в обеих страницах, поэтому файл подключён к каждой. */
+
+@view-transition {
+  navigation: auto;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    /* По умолчанию браузер растворяет одну страницу в другой — нам нужен край листа. */
+    mix-blend-mode: normal;
+    animation-duration: 0.52s;
+    animation-timing-function: cubic-bezier(0.62, 0.02, 0.2, 1);
+    animation-fill-mode: both;
+  }
+  ::view-transition-old(root) {
+    animation-name: sheet-under;
+  }
+  ::view-transition-new(root) {
+    animation-name: sheet-over;
+  }
+}
+
+/* «Уменьшение движения»: никакого движения, страница сменяется сразу. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+  ::view-transition-old(*) {
+    display: none;
+  }
+}
+
+/* Край листа скошен на 12% ширины: низ идёт впереди верха. */
+@keyframes sheet-over {
+  from {
+    clip-path: polygon(112% 0, 112% 0, 100% 100%, 100% 100%);
+  }
+  to {
+    clip-path: polygon(0 0, 112% 0, 100% 100%, -12% 100%);
+  }
+}
+@keyframes sheet-under {
+  to {
+    filter: brightness(0.72);
+    transform: translateX(-1.6%);
+  }
+}

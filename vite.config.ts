@@ -44,7 +44,17 @@ export default defineConfig({
   // 'mpa': отсутствующие файлы отдают 404, а не index.html.
   // Так проверка «лежит ли модель в public/models» не получает HTML вместо VRM.
   appType: 'mpa',
-  build: { target: 'esnext' },
+  build: {
+    target: 'esnext',
+    // Страницы сайта. Новая страница — новая строка.
+    rollupOptions: {
+      input: [
+        'index.html',
+        'programme.html',
+        '404.html',
+      ],
+    },
+  },
   server: { watch: { ignored: ['**/shots/**'] } },
   plugins: [shots()],
 });

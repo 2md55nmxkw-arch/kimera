@@ -1,0 +1,691 @@
+/* Программка: театральная программка пьесы, отпечатанная на бумаге.
+   Тот же набор, что на главной (слово во всю ширину, курсивная реплика, этикетки
+   моноширинным), только чернилами по бумаге, а не светом по сцене. */
+@import '@fontsource/dela-gothic-one/index.css';
+@import '@fontsource/instrument-serif/400-italic.css';
+@import '@fontsource-variable/martian-mono/index.css';
+@import './shared.css';
+
+/* ── верхняя строка: знак и язык ───────────────────────────────────────── */
+
+/* Стоит там же, где на главной, — при переходе между страницами знак не прыгает.
+   Режим difference: строка читается и на бумаге, и на чёрном занавесе внизу. */
+.bar {
+  position: fixed;
+  z-index: 2;
+  top: calc(var(--pad) * 0.8);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 var(--pad);
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  mix-blend-mode: difference;
+  pointer-events: none;
+}
+.bar > * {
+  pointer-events: auto;
+}
+.bar a:hover,
+.bar button:hover {
+  color: #fff;
+  opacity: 0.6;
+}
+.mark {
+  font-family: var(--display);
+  font-size: clamp(1rem, 1.5vw, 1.35rem);
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+.mark [lang='ja'] {
+  margin-left: 0.4em;
+  font-size: 0.72em;
+  letter-spacing: 0.12em;
+}
+.lang {
+  display: flex;
+  gap: 0.2em;
+  font-size: 0.72rem;
+}
+.lang button {
+  padding: 0.5em 0.6em;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.lang button[aria-pressed='true'] {
+  text-decoration: underline 2px;
+  text-underline-offset: 0.45em;
+}
+
+/* ── шапка: обложка и слово во всю ширину ──────────────────────────────── */
+
+.head {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: end;
+  align-items: end;
+  gap: clamp(0.7rem, 2vh, 1.4rem) 2rem;
+  min-height: min(92svh, 62rem);
+  padding: calc(var(--pad) + 6rem) var(--pad) clamp(2.2rem, 7vh, 4.5rem);
+  container-type: inline-size;
+}
+
+/* Обложка: одно тело, сшитое из трёх кадров, — голова как есть, торс витражом,
+   юбка карандашом. Кадры сняты в одной позе (scripts/posters.mjs), поэтому полосы
+   сходятся. Карандашная полоса внизу растворяется в бумаге страницы. */
+.cover {
+  position: absolute;
+  top: calc(var(--pad) * 0.8 + 2.6rem);
+  right: calc(var(--pad) + 3%);
+  height: min(74%, 46rem);
+  aspect-ratio: 4 / 5;
+  rotate: 1.4deg;
+}
+.strip {
+  position: absolute;
+  inset: 0;
+  /* Из кадра 16:9 вырезано окно 4:5 вокруг фигуры: 44% ширины, начиная с 40%. */
+  background-size: 227.3% auto;
+  background-position: 71.4% 90%;
+  background-color: var(--ink);
+}
+.strip-head {
+  background-image: url('/poster/default.webp');
+  clip-path: polygon(0 0, 100% 0, 100% 43%, 0 48%);
+}
+.strip-torso {
+  background-image: url('/poster/mosaic.webp');
+  clip-path: polygon(0 48%, 100% 43%, 100% 73%, 0 78%);
+}
+.strip-skirt {
+  background-image: url('/poster/sketch.webp');
+  background-color: transparent;
+  clip-path: polygon(0 78%, 100% 73%, 100% 100%, 0 100%);
+  mask-image: linear-gradient(#000 78%, #0000 99%), linear-gradient(90deg, #0000, #000 20% 80%, #0000);
+  mask-composite: intersect;
+}
+/* Шов: линия и стежки поперёк неё. Стежки — та же линия, только очень толстая
+   и из коротких штрихов: каждый штрих получается чёрточкой поперёк шва. */
+.seams {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: #fff;
+}
+.seams {
+  filter: drop-shadow(0 0 1.5px rgb(11 11 12 / 0.55));
+}
+.seams path {
+  stroke-width: 1.4;
+}
+.seams .stitch {
+  stroke-width: 11;
+  stroke-dasharray: 1.5 12.5;
+}
+.cover::before,
+.cover::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: -0.55rem;
+  width: clamp(2.8rem, 5vw, 4.6rem);
+  height: 1.3rem;
+  background: rgb(233 221 170 / 0.78);
+  box-shadow: 0 1px 2px rgb(11 11 12 / 0.18);
+}
+.cover::before {
+  left: -1.2rem;
+  rotate: -38deg;
+}
+.cover::after {
+  right: -1.2rem;
+  rotate: 36deg;
+}
+
+.word {
+  font-family: var(--display);
+  font-weight: 400;
+  line-height: 0.84;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  user-select: none;
+}
+/* Кегль подобран так, чтобы слово встало ровно в ширину набора на любом экране
+   и на любом языке: --em — ширина слова в кеглях, её меряет programme.ts.
+   Режим difference, как на главной: на бумаге слово чернильное, а там, где оно
+   заходит на обложку, выворачивается. */
+.head .word {
+  position: relative;
+  grid-column: 1 / -1;
+  font-size: calc(100cqw / var(--em, 8.4));
+  margin-left: -0.035em; /* выступ буквы за край набора, чтобы край читался ровным */
+  color: #fff;
+  mix-blend-mode: difference;
+}
+.lede {
+  position: relative;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.5rem, 3.4vw, 3.4rem);
+  line-height: 1;
+}
+.kana {
+  position: absolute;
+  top: calc(var(--pad) + 3.4rem);
+  left: var(--pad);
+  writing-mode: vertical-rl;
+  font-size: clamp(1.3rem, 2.6vw, 2.5rem);
+  letter-spacing: 0.18em;
+  user-select: none;
+}
+
+/* Оглавление — там, где на главной стоит этикетка главы: слева над словом. */
+.contents {
+  position: relative;
+  grid-column: 1;
+  margin-bottom: clamp(0.4rem, 2vh, 1.4rem);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.contents ol {
+  display: grid;
+  gap: 0.15em;
+  padding: 0;
+  list-style: none;
+}
+.contents a {
+  display: inline-flex;
+  gap: 1.1em;
+  padding: 0.2em 0;
+  text-decoration: none;
+}
+.contents b {
+  font-weight: 600;
+  color: var(--pink-ink);
+}
+.contents a:hover {
+  color: inherit;
+  text-decoration: underline 1px;
+  text-underline-offset: 0.3em;
+}
+
+/* ── билет: ссылка на главную ──────────────────────────────────────────── */
+
+.ticket {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  justify-self: end;
+  color: var(--paper);
+  font-size: 0.64rem;
+  line-height: 1.5;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  rotate: -2deg;
+  filter: drop-shadow(0 0.4rem 0.5rem rgb(11 11 12 / 0.2));
+}
+.ticket:hover {
+  color: var(--paper);
+}
+.ticket > span {
+  padding: 1em 1.4em;
+  background: var(--ink);
+  transition:
+    translate 0.25s,
+    rotate 0.25s;
+}
+/* Полукруглые вырезы на линии отрыва — по одному в каждом углу стыка. */
+.stub {
+  display: grid;
+  gap: 0.1em;
+  border-right: 1px dashed rgb(244 239 228 / 0.45);
+  mask:
+    radial-gradient(circle 0.5em at 100% 0, #0000 97%, #000) top / 100% 51% no-repeat,
+    radial-gradient(circle 0.5em at 100% 100%, #0000 97%, #000) bottom / 100% 51% no-repeat;
+}
+.stub b {
+  font-weight: 600;
+}
+.stub i {
+  font-family: var(--display);
+  font-style: normal;
+  font-size: 1.25em;
+  letter-spacing: 0;
+  color: var(--pink);
+}
+.tear {
+  display: flex;
+  align-items: center;
+  gap: 0.7em;
+  font-weight: 600;
+  color: var(--pink);
+  transform-origin: 0 100%;
+  mask:
+    radial-gradient(circle 0.5em at 0 0, #0000 97%, #000) top / 100% 51% no-repeat,
+    radial-gradient(circle 0.5em at 0 100%, #0000 97%, #000) bottom / 100% 51% no-repeat;
+}
+.tear i {
+  font-style: normal;
+}
+/* Корешок надрывается. */
+.ticket:hover .tear,
+.ticket:focus-visible .tear {
+  translate: 0.3em 0.05em;
+  rotate: 4deg;
+}
+
+/* ── разделы ───────────────────────────────────────────────────────────── */
+
+.part {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(9rem, 3fr) minmax(0, 9fr);
+  gap: 1.2rem clamp(1.5rem, 4vw, 4rem);
+  padding: clamp(1.4rem, 3.4vh, 2.2rem) var(--pad) clamp(3rem, 9vh, 6rem);
+}
+/* Линейка над разделом — в ширину набора, не страницы. */
+.part::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--pad);
+  right: var(--pad);
+  border-top: 1px solid var(--ink);
+}
+.part h2 {
+  position: sticky;
+  top: calc(var(--pad) * 0.8 + 3rem);
+  align-self: start;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.part h2 b {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.4rem, 2.4vw, 2.2rem);
+  line-height: 1;
+  letter-spacing: 0;
+  color: var(--pink-ink);
+}
+.body {
+  min-width: 0;
+}
+.body > p {
+  max-width: 30em;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.25rem, 2.1vw, 1.9rem);
+  line-height: 1.15;
+  text-wrap: pretty;
+}
+.body > p + p {
+  margin-top: 0.6em;
+}
+
+/* Ремарка: мелко и моноширинным, как примечание под списком. */
+.body > .aside {
+  max-width: 44em;
+  margin-top: 1.6rem;
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  opacity: 0.8;
+}
+.aside::before {
+  content: '※ ';
+  color: var(--pink-ink);
+}
+
+/* 01 — о пьесе: три предложения крупным курсивом. */
+#piece .body p {
+  max-width: 27em;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.45rem, 2.7vw, 2.5rem);
+  line-height: 1.12;
+  text-wrap: pretty;
+}
+#piece .body p + p {
+  margin-top: 0.55em;
+}
+
+/* 02 — главы по порядку: номер, имя, отточие, одна строка о шкуре. */
+.acts {
+  padding: 0;
+  list-style: none;
+}
+.acts li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  padding: 0.5em 0 0.6em;
+}
+.act {
+  flex: 1 1 14em;
+  display: flex;
+  align-items: baseline;
+  gap: 0.8em;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.act::after {
+  content: '';
+  flex: 1;
+  min-width: 1.5em;
+  margin: 0 0.9em 0 0.1em;
+  border-bottom: 1px dotted rgb(11 11 12 / 0.55);
+  translate: 0 -0.2em;
+}
+.act b {
+  font-weight: 600;
+  color: var(--pink-ink);
+}
+.act [lang='ja'] {
+  font-size: 1.25em;
+  letter-spacing: 0.16em;
+}
+.act strong {
+  font-weight: 600;
+}
+.acts .line {
+  margin-left: auto;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.25rem, 2.1vw, 1.9rem);
+  line-height: 1.1;
+  text-align: right;
+}
+
+/* 03, 07 — список труппы: роль, отточие, имя. */
+.roll > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  padding: 0.5em 0 0.6em;
+}
+.roll dt {
+  flex: 1 1 8em;
+  display: flex;
+  align-items: baseline;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.roll dt::after {
+  content: '';
+  flex: 1;
+  min-width: 1.5em;
+  margin: 0 0.9em;
+  border-bottom: 1px dotted rgb(11 11 12 / 0.55);
+  translate: 0 -0.2em;
+}
+.roll dd {
+  margin-left: auto;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.25rem, 2.1vw, 1.9rem);
+  line-height: 1.1;
+  text-align: right;
+}
+.roll dd [lang='ja'] {
+  font-style: normal;
+  font-size: 0.78em;
+  letter-spacing: 0.04em;
+}
+.roll dd small {
+  font-family: var(--mono);
+  font-style: normal;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+/* Подпись о правах — плотная плашка, как этикетки на главной. */
+.stamp {
+  display: inline-block;
+  margin-top: 2rem;
+  padding: 0.9em 1.15em 1em;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: clamp(1.05rem, 2.3vw, 2rem);
+  line-height: 1.25;
+}
+.stamp small {
+  display: block;
+  margin-bottom: 0.5em;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pink);
+}
+
+/* 04, 05 — ссылки: название слева, адрес справа. */
+.links {
+  margin-top: 1.6rem;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid rgb(11 11 12 / 0.25);
+}
+.links a {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.2em 1.5em;
+  padding: 1em 0 1.05em;
+  border-bottom: 1px solid rgb(11 11 12 / 0.25);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.links .host {
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.links .host::after {
+  content: ' ↗';
+}
+
+/* 06 — шрифты: каждый показан сам собой. */
+.faces {
+  padding: 0;
+  list-style: none;
+}
+.faces li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem 2rem;
+  align-items: baseline;
+  padding: 1.1rem 0 1.3rem;
+  border-bottom: 1px solid rgb(11 11 12 / 0.25);
+}
+.faces li:first-child {
+  padding-top: 0;
+}
+.specimen {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+.specimen-dela {
+  font-family: var(--display);
+  font-size: clamp(1.9rem, 6.2vw, 5.6rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.specimen-serif {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(2rem, 6.4vw, 5.8rem);
+  line-height: 1.05;
+}
+.specimen-mono {
+  padding: 0.5em 0 0.3em;
+  font-size: clamp(0.7rem, 1.9vw, 1.7rem);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.face {
+  display: flex;
+  gap: 1em;
+  align-items: baseline;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.face strong {
+  font-weight: 600;
+}
+.face span {
+  color: var(--pink-ink);
+}
+.licence {
+  font-size: 0.68rem;
+  text-align: right;
+}
+.spdx {
+  opacity: 0.6;
+}
+
+/* ── занавес ───────────────────────────────────────────────────────────── */
+
+.curtain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 2rem;
+  margin-top: clamp(2rem, 6vh, 4rem);
+  padding: clamp(3rem, 12vh, 7rem) var(--pad) calc(var(--pad) * 0.8);
+  background: var(--ink);
+  color: var(--paper);
+  container-type: inline-size;
+}
+.curtain .word {
+  grid-column: 1 / -1;
+  font-size: min(calc(100cqw / var(--em-end, 5.6)), 46svh);
+  margin-left: -0.035em;
+  /* Буквы контуром: занавес ещё не опущен до конца. */
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--paper);
+}
+.curtain .ticket {
+  grid-column: 2;
+  grid-row: 2;
+  color: var(--ink);
+  filter: none;
+}
+.curtain .ticket > span {
+  background: var(--paper);
+}
+.curtain .stub {
+  border-right-color: rgb(11 11 12 / 0.45);
+}
+.curtain .stub i,
+.curtain .tear {
+  color: var(--pink-ink);
+}
+.fine {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+/* Без скриптов: одна строка о правах. */
+.plain {
+  max-width: 40em;
+  padding: calc(var(--pad) + 5rem) var(--pad) var(--pad);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.4rem;
+  line-height: 1.25;
+}
+
+/* ── узкие экраны ──────────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .head {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: min(82svh, 44rem);
+  }
+  .cover {
+    right: 50%;
+    translate: 50% 0;
+    top: calc(var(--pad) * 0.8 + 3.4rem);
+    height: auto;
+    width: min(78%, 24rem);
+  }
+  .kana {
+    left: auto;
+    right: var(--pad);
+    top: calc(var(--pad) + 4.4rem);
+    color: #fff;
+    mix-blend-mode: difference;
+  }
+  .ticket {
+    justify-self: start;
+    margin-top: 1.2rem;
+  }
+  .part {
+    grid-template-columns: minmax(0, 1fr);
+    padding-bottom: clamp(2.6rem, 8vh, 4rem);
+  }
+  .part h2 {
+    position: static;
+    display: flex;
+    align-items: baseline;
+    gap: 0.8em;
+  }
+  .part h2 b {
+    margin: 0;
+  }
+  .faces li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .licence {
+    text-align: left;
+  }
+  .curtain {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .curtain .ticket,
+  .fine {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticket > span {
+    transition: none;
+  }
+}
