@@ -81,8 +81,15 @@ export function createTrail(renderer: THREE.WebGPURenderer) {
   let state: unknown;
   let primed = false;
   let splashAge = 1;
+  let wipe = false;
 
   return {
+    /** Стереть след: следующий кадр начнётся с чистой текстуры. */
+    reset() {
+      primed = false;
+      splashAge = 1;
+      wipe = true;
+    },
     /** Узел текстуры со следом: красный канал, 0…1. */
     node,
     /** Чернильный всплеск в точке экрана (uv от левого верхнего угла). */
@@ -104,8 +111,9 @@ export function createTrail(renderer: THREE.WebGPURenderer) {
       u.aspect.value = aspect;
       u.radius.value = radius;
       // Неподвижная линза следа не оставляет; зажатая кнопка добавляет чернил.
-      u.strength.value = Math.min(1, speed * 3.5 + press * 0.6);
-      u.decay.value = Math.exp(-dt / 1.1);
+      u.strength.value = wipe ? 0 : Math.min(1, speed * 3.5 + press * 0.6);
+      u.decay.value = wipe ? 0 : Math.exp(-dt / 1.1);
+      wipe = false;
       u.clock.value = t;
       // Кольцо всплеска растёт треть секунды и за это время гаснет.
       splashAge = Math.min(1, splashAge + dt / 0.34);

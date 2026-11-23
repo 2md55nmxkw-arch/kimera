@@ -188,6 +188,8 @@ export interface Poser {
     react: Reaction,
     eye: THREE.Vector3,
   ): Pose;
+  /** Сбросить инерцию рук и пальцев: следующая поза встанет сразу. */
+  reset(): void;
 }
 
 /** Пружина: значение догоняет цель с небольшим проскоком. */
@@ -212,6 +214,11 @@ class Spring {
       this.x += this.v * h;
     }
     return this.x;
+  }
+  /** Со следующего шага начать с цели, без разгона. */
+  reset(): void {
+    this.v = 0;
+    this.primed = false;
   }
 }
 
@@ -471,6 +478,13 @@ export function createPoser(vrm: VRM): Poser | null {
 
   return {
     poses: POSES,
+    reset() {
+      for (const rig of arms) {
+        rig.ready = false;
+        rig.vel.set(0, 0, 0);
+        for (const s of [...rig.curl, rig.spread, ...rig.wrist]) s.reset();
+      }
+    },
     update(dt, t, mood, lookPoint, react, eye) {
       // Поза главы: смесь двух соседних по прокрутке.
       const last = POSES.length - 1;

@@ -2,8 +2,10 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MToonMaterialLoaderPlugin, VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import { MToonNodeMaterial } from '@pixiv/three-vrm/nodes';
+import { markBodyParts } from './parts';
 import { createPoser, type Mood } from './pose';
 import { createReactor, type Zone } from './react';
+import { rng } from '../core/random';
 
 export interface Look {
   x: number; // куда повернуть голову: −1 слева … 1 справа от персонажа
@@ -25,6 +27,10 @@ export interface Actor {
   hit?(ndcX: number, ndcY: number, camera: THREE.PerspectiveCamera): Zone | null;
   /** Клик по персонажу: запускает реакцию и возвращает зону, в которую попали. */
   poke?(ndcX: number, ndcY: number, camera: THREE.PerspectiveCamera): Zone | null;
+  /** Запустить реакцию напрямую, без попадания по экрану. */
+  react?(zone: Zone, offset: number): void;
+  /** Вернуть всё к состоянию сразу после загрузки: инерцию, моргание, реакции, волосы. */
+  reset?(): void;
   /** Для отладки из консоли в dev-сборке. */
   debug?: unknown;
 }
@@ -76,6 +82,7 @@ async function loadVRM(url: string): Promise<Actor> {
   vrm.scene.traverse((o) => {
     o.frustumCulled = false;
   });
+  markBodyParts(vrm); // ярус и рука в каждой вершине — для слоя меток G-буфера
 
   // У VRM 0.x оси X и Z нормализованного скелета зеркальны относительно VRM 1.0.
   const flip = vrm.meta?.metaVersion === '0' ? -1 : 1;
@@ -233,6 +240,20 @@ async function loadVRM(url: string): Promise<Actor> {
       reactor.trigger(found.zone, found.offset);
       return found.zone;
     },
+    react(zone, offset) {
+      reactor.trigger(zone, offset);
+    },
+    reset() {
+      yaw.v = 0;
+      pitch.v = 0;
+      blinkIn = 2.5;
+      blink = 0;
+      reactor.reset();
+      poser?.reset();
+      kick(0, false);
+      kick(1, false);
+      vrm.springBoneManager?.reset();
+    },
     update(dt, t, look, camera, mood) {
       const react = reactor.update(dt);
       const attend = 1 - react.ignore; // обиделась — на курсор не смотрит
@@ -283,7 +304,7 @@ async function loadVRM(url: string): Promise<Actor> {
       blinkIn -= dt;
       if (blinkIn <= 0) {
         blink = 1;
-        blinkIn = 2 + Math.random() * 4;
+        blinkIn = 2 + rng() * 4;
       }
       blink = Math.max(0, blink - dt * 7);
       const face = pose?.face ?? { relaxed: 0.3, happy: 0, surprised: 0, wink: 0 };

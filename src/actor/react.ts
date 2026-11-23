@@ -91,6 +91,15 @@ export function createReactor() {
       return kind !== null;
     },
 
+    /** Забыть всё: текущую реакцию и недавние клики. */
+    reset() {
+      kind = null;
+      age = 0;
+      side = 0;
+      clock = 0;
+      recent.length = 0;
+    },
+
     trigger(zone: Zone, offset: number) {
       recent.push({ zone, at: clock });
       while (recent.length && clock - recent[0].at > 4.5) recent.shift();

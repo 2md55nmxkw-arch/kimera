@@ -19,6 +19,8 @@ export interface Stage {
   /** Ставит кольца за голову персонажа: у разных моделей она на разной высоте. */
   setHeadHeight(y: number): void;
   update(dt: number, t: number): void;
+  /** Вернуть накопленные повороты предметов к началу. */
+  reset(): void;
 }
 
 // Сцена намеренно простая и светлая: настоящую картинку делают шкуры,
@@ -96,6 +98,10 @@ export function createStage(): Stage {
     setHeadHeight(y) {
       halo.position.y = y;
       halo2.position.y = y - 0.05;
+    },
+    reset() {
+      halo.rotation.set(0, 0, 0);
+      for (const o of orbiters) o.mesh.rotation.set(0, 0, 0);
     },
     update(dt, t) {
       halo.rotation.z += dt * 0.08;
