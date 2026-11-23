@@ -635,7 +635,10 @@
 @media (max-width: 760px) {
   .head {
     grid-template-columns: minmax(0, 1fr);
-    min-height: min(82svh, 44rem);
+    min-height: 0;
+    /* Обложка стоит поверх шапки; оглавление начинается под её цветной частью,
+       чтобы строки не ложились на витраж. Высота обложки — ширина × 5/4. */
+    padding-top: calc(var(--pad) * 0.8 + 3.4rem + min(78vw, 24rem) * 0.98);
   }
   .cover {
     right: 50%;
