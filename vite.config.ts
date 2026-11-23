@@ -16,8 +16,9 @@ function shots(): Plugin {
         try {
           const url = new URL(req.url ?? '/', 'http://localhost');
           const set = url.searchParams.get('set') ?? '';
-          const done = url.pathname === '/done';
-          const name = done ? '_done' : (url.searchParams.get('name') ?? '');
+          // /save — кадр PNG, /done — итог съёмки, /perf — итог замера скорости.
+          const report = { '/done': '_done', '/perf': '_perf' }[url.pathname];
+          const name = report ?? url.searchParams.get('name') ?? '';
           if (req.method !== 'POST' || !safe.test(set) || !safe.test(name)) {
             res.statusCode = 400;
             res.end();
@@ -27,7 +28,7 @@ function shots(): Plugin {
           for await (const chunk of req) chunks.push(chunk as Buffer);
           const dir = path.resolve(server.config.root, 'shots', set);
           await mkdir(dir, { recursive: true });
-          await writeFile(path.join(dir, done ? '_done.json' : `${name}.png`), Buffer.concat(chunks));
+          await writeFile(path.join(dir, report ? `${report}.json` : `${name}.png`), Buffer.concat(chunks));
           res.statusCode = 204;
           res.end();
         } catch (err) {

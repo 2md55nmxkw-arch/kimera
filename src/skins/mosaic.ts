@@ -30,7 +30,7 @@ import { hash22, paint, pick, srgb, toLinear, type N, type SkinContext } from '.
 const JEWELS = ['#b01e3c', '#1d409c', '#0f7a5c', '#e09a22', '#5a3192', '#14808c'];
 
 export function mosaicSkin(c: SkinContext): N {
-  const { u, uv, css, asp, toUV, colorTex, viewDist, isFg, edgeAt } = c;
+  const { u, uv, css, asp, toUV, colorAt, viewDist, isFg, edgeAt } = c;
 
   const voronoi = (tile: number, salt: number) => {
     const g: N = css.div(tile);
@@ -64,7 +64,7 @@ export function mosaicSkin(c: SkinContext): N {
   const besideFigure: N = isFg(viewDist(fine.beside)); // соседний мелкий — на фигуре
 
   // Стекло фигуры: цвет модели, насыщеннее и в несколько ступеней.
-  const fc: N = srgb(colorTex.sample(fine.at).rgb);
+  const fc: N = srgb(colorAt(fine.at).rgb);
   const vivid: N = mix(vec3(luminance(fc)), fc, 1.45);
   const figureGlass: N = floor(saturate(vivid).mul(6.0).add(0.5))
     .div(6.0)

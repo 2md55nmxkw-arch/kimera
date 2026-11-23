@@ -6,3 +6,5 @@ dist
 public/models/*.vrm
 # Контрольные кадры снимаются заново командой npm run shots.
 shots/
+# Рабочие копии параллельных дорожек.
+.claude/worktrees/

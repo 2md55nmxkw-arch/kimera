@@ -225,15 +225,30 @@ scripts/             shots.mjs  shots-compare.mjs  shots-sheet.mjs
 Проверка:
 
 ```bash
+npm run setup                        # в свежей рабочей копии: зависимости и модель
 npm run check                        # типы и сборка
-npm run shots                        # снять кадры в shots/current (WebGL 2, безголовый Chrome)
+npm run shots                        # кадры в shots/current (WebGL 2)
+npm run shots:gpu                    # кадры в shots/current-gpu (WebGPU)
 npm run shots:compare                # сравнить shots/baseline и shots/current
+npm run shots:compare -- baseline-gpu current-gpu
 npm run shots:sheet -- current       # все кадры одной картинкой
+npm run page -- 05-sketch-done       # вся страница с текстом, замершая в состоянии кадра
+npm run page -- 02-default-clear --mobile
+npm run perf                         # время кадра в 1920×1080 на обоих рендерах
 ```
 
-Кадры WebGPU безголовый Chrome на этой машине снять не может (ему достаётся только
-программный адаптер). Они снимаются из открытой страницы dev-сборки:
-`await __kimera.shots('current-gpu')`, эталон лежит в `shots/baseline-gpu`.
+Свои кадры модуль кладёт рядом с собой в файл `что-то.shots.ts` — они подхватываются сами.
+
+Скорость на GTX 1060 в 1920×1080 (потолок для 60 кадров в секунду — 16.7 мс):
+
+| Глава | WebGPU | WebGL 2 |
+|---|---|---|
+| Default | 9.6 мс | 22.8 мс |
+| Mosaic | 13.2 мс | 36.7 мс |
+| Sketch | 40.0 мс | 150.1 мс |
+
+Набросок — узкое место, его ускорение входит в дорожку 4. WebGL 2 медленнее в 2.5–4 раза
+по всем главам; причина не выяснена.
 
 **Волна 0 — фундамент — сделана.** E1–E4 и git. Картинка после неё совпала с прежней
 пиксель в пиксель на обоих рендерах (14 кадров), добавился кадр со слоем меток.

@@ -22,6 +22,11 @@ export interface Actor {
   face: THREE.Vector3;
   /** Щёки в мире: [левая, правая]. */
   cheeks: [THREE.Vector3, THREE.Vector3];
+  /**
+   * Именованные точки на теле в мире, обновляются каждый кадр: face, top, drillL,
+   * drillR, body, handL, handR, armL, armR. К ним привязываются подписи и предметы.
+   */
+  points: Record<string, THREE.Vector3>;
   update(dt: number, t: number, look: Look, camera: THREE.Camera, mood: Mood): void;
   /** Что у персонажа под этой точкой экрана (координаты −1…1), если что-то есть. */
   hit?(ndcX: number, ndcY: number, camera: THREE.PerspectiveCamera): Zone | null;
@@ -36,10 +41,11 @@ export interface Actor {
 }
 
 // Модель лежит в public/models/teto.vrm. Пока её нет, на сцене стоит манекен.
-export async function loadActor(url: string): Promise<Actor> {
+/** @param onProgress доля загруженного файла модели, 0…1 */
+export async function loadActor(url: string, onProgress?: (loaded: number) => void): Promise<Actor> {
   if (await exists(url)) {
     try {
-      return await loadVRM(url);
+      return await loadVRM(url, onProgress);
     } catch (err) {
       console.warn('[kimera] VRM не загрузилась, ставлю манекен:', err);
     }
@@ -60,7 +66,7 @@ async function exists(url: string): Promise<boolean> {
 // Во сколько раз усилить отклонение взгляда перед тем, как отдать его модели.
 const EYE_GAIN = 3;
 
-async function loadVRM(url: string): Promise<Actor> {
+async function loadVRM(url: string, onProgress?: (loaded: number) => void): Promise<Actor> {
   const loader = new GLTFLoader();
   loader.register(
     (parser) =>
@@ -72,7 +78,9 @@ async function loadVRM(url: string): Promise<Actor> {
       }),
   );
 
-  const gltf = await loader.loadAsync(url);
+  const gltf = await loader.loadAsync(url, (e) => {
+    if (e.lengthComputable && e.total > 0) onProgress?.(e.loaded / e.total);
+  });
   const vrm = gltf.userData.vrm as VRM | undefined;
   if (!vrm) throw new Error('в файле нет данных VRM');
 
@@ -117,6 +125,8 @@ async function loadVRM(url: string): Promise<Actor> {
   const rawChest = raw('upperChest') ?? raw('chest');
   const rawHandL = raw('leftMiddleProximal') ?? raw('leftHand');
   const rawHandR = raw('rightMiddleProximal') ?? raw('rightHand');
+  const rawArmL = raw('leftUpperArm');
+  const rawArmR = raw('rightUpperArm');
   // Поворот головы считаем относительно исходного, чтобы зоны «ехали» вместе с ней.
   const headRestInv = rawHead
     ? rawHead.getWorldQuaternion(new THREE.Quaternion()).invert()
@@ -135,6 +145,8 @@ async function loadVRM(url: string): Promise<Actor> {
     body: zone('body', 0.13, 1.15),
   };
   const zoneList = Object.values(zones);
+  const points: Record<string, THREE.Vector3> = { armL: new THREE.Vector3(), armR: new THREE.Vector3() };
+  for (const z of zoneList) points[z.name] = z.pos;
   const headWorld = new THREE.Vector3();
   const qHead = new THREE.Quaternion();
   const cheeks: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
@@ -158,6 +170,8 @@ async function loadVRM(url: string): Promise<Actor> {
     }
     rawHandL?.getWorldPosition(zones.handL.pos);
     rawHandR?.getWorldPosition(zones.handR.pos);
+    rawArmL?.getWorldPosition(points.armL);
+    rawArmR?.getWorldPosition(points.armR);
   }
 
   const inView = new THREE.Vector3();
@@ -230,6 +244,7 @@ async function loadVRM(url: string): Promise<Actor> {
     headY,
     face: zones.face.pos,
     cheeks,
+    points,
     debug: { vrm, lookTarget, poser, reactor, zones },
     hit(ndcX, ndcY, camera) {
       return find(ndcX, ndcY, camera)?.zone ?? null;
@@ -425,6 +440,17 @@ function buildStandIn(): Actor {
     headY: 1.47,
     face: new THREE.Vector3(0, 1.47, 0.08),
     cheeks: [new THREE.Vector3(0.045, 1.44, 0.1), new THREE.Vector3(-0.045, 1.44, 0.1)],
+    points: {
+      face: new THREE.Vector3(0, 1.47, 0.08),
+      top: new THREE.Vector3(0, 1.6, 0),
+      drillL: new THREE.Vector3(0.18, 1.45, -0.02),
+      drillR: new THREE.Vector3(-0.18, 1.45, -0.02),
+      body: new THREE.Vector3(0, 1.1, 0.1),
+      handL: new THREE.Vector3(0.22, 0.8, 0),
+      handR: new THREE.Vector3(-0.22, 0.8, 0),
+      armL: new THREE.Vector3(0.2, 1.25, 0),
+      armR: new THREE.Vector3(-0.2, 1.25, 0),
+    },
     update(dt, t, look) {
       const k = 1 - Math.exp(-dt * 6);
       const prevYaw = yaw.v;

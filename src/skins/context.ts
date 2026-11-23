@@ -73,12 +73,16 @@ export const pick = (sel: N, i: number): N => saturate(float(1).sub(abs(sel.sub(
 
 export interface SkinContext {
   u: SkinUniforms;
-  /** Слои G-буфера (core/gbuffer.ts). */
-  colorTex: N;
-  normalTex: N;
-  depthTex: N;
+  /**
+   * Слои G-буфера (core/gbuffer.ts) в точке экрана. Шкура считается внутри ветки
+   * «нужна ли она этому пикселю», а в ветке нельзя брать текстуру с автоматическим
+   * выбором уровня — WebGPU такой шейдер не соберёт. Поэтому слои читаются только
+   * через эти функции, а свои текстуры — через .sample(uv).level(0).
+   */
+  colorAt(uv: N): N; // цвет сцены, линейный
+  normalAt(uv: N): N; // нормаль в пространстве камеры
   /** Метки: r — номер предмета, g — ярус тела, b — рука. */
-  idTex: N;
+  idAt(uv: N): N;
 
   uv: N; // точка экрана, 0…1 от левого верхнего угла
   res: N; // размер буфера в пикселях
@@ -101,7 +105,6 @@ export interface SkinContext {
   lin: N; // цвет сцены в этой точке, линейный
   dist: N; // расстояние до камеры
   fg: N; // 1 на предмете, 0 на фоне
-  edge: N; // контур в этой точке
   fromHead: N; // вектор от центра лица, доли высоты экрана
   heads: N; // расстояние от лица в «головах»
 }
@@ -112,7 +115,12 @@ export function createContext(scenePass: N, u: SkinUniforms): SkinContext {
   const normalTex: N = scenePass.getTextureNode('normal');
   const depthTex: N = scenePass.getTextureNode('depth');
   const idTex: N = scenePass.getTextureNode('id');
+  const colorAt = (p: N): N => colorTex.sample(p).level(0);
+  const normalAt = (p: N): N => normalTex.sample(p).level(0);
+  const idAt = (p: N): N => idTex.sample(p).level(0);
 
+  // Глубину three и так читает без выбора уровня (текстура без фильтрации), а с
+  // явным уровнем собирает для WebGL неверный шейдер — поэтому здесь без .level(0).
   const viewDist = (uv: N): N =>
     (perspectiveDepthToViewZ(depthTex.sample(uv).r, u.near, u.far) as N).negate();
   const isFg = (d: N): N => float(1).sub(step(u.far.mul(0.9), d));
@@ -135,30 +143,28 @@ export function createContext(scenePass: N, u: SkinUniforms): SkinContext {
 
   const edgeAt = (c: N, radius: number): N => {
     const d0: N = viewDist(c).toVar();
-    const n0: N = normalTex.sample(c).xyz.toVar();
+    const n0: N = normalAt(c).xyz.toVar();
     let dz: N = float(0);
     let dn: N = float(0);
     for (const t of cross(pxUV.mul(radius))) {
       dz = dz.add(abs(viewDist(c.add(t)).sub(d0)));
-      dn = dn.add(length(normalTex.sample(c.add(t)).xyz.sub(n0)));
+      dn = dn.add(length(normalAt(c.add(t)).xyz.sub(n0)));
     }
     return max(smoothstep(0.004, 0.012, dz.div(d0)), smoothstep(0.3, 0.7, dn));
   };
 
-  const lin: N = colorTex.sample(uv).rgb.toVar();
+  const lin: N = colorAt(uv).rgb.toVar();
   const dist: N = viewDist(uv).toVar();
   const fg: N = isFg(dist).toVar();
-  const edge: N = edgeAt(uv, 1.25).toVar();
   // Положение пикселя относительно лица: в долях высоты экрана и в «головах».
   const fromHead: N = uv.sub(u.head).mul(asp).toVar();
   const heads: N = length(fromHead).div(u.headSize).toVar();
 
   return {
     u,
-    colorTex,
-    normalTex,
-    depthTex,
-    idTex,
+    colorAt,
+    normalAt,
+    idAt,
     uv,
     res,
     css,
@@ -174,7 +180,6 @@ export function createContext(scenePass: N, u: SkinUniforms): SkinContext {
     lin,
     dist,
     fg,
-    edge,
     fromHead,
     heads,
   };

@@ -63,7 +63,7 @@ export function createSketchDraw(index: number, freeze: { draw: number }): Part 
 }
 
 export function sketchSkin(c: SkinContext): N {
-  const { u, uv, css, pxUV, pxH, asp, colorTex, normalTex, viewDist, cross, lin, fg, fromHead, heads } = c;
+  const { u, uv, css, pxUV, pxH, asp, colorAt, normalAt, viewDist, cross, lin, fg, fromHead, heads } = c;
 
   const boil: N = floor(u.clock.mul(8.0)).div(8.0).mul(3.1);
   /** Дрожание руки: смещение в CSS-пикселях. */
@@ -72,7 +72,7 @@ export function sketchSkin(c: SkinContext): N {
       mx_noise_float(vec3(css.mul(scale), boil.add(salt))),
       mx_noise_float(vec3(css.mul(scale).add(41.3), boil.add(salt + 9.1))),
     ).mul(amp);
-  const lum = (p: N): N => luminance(srgb(colorTex.sample(p).rgb));
+  const lum = (p: N): N => luminance(srgb(colorAt(p).rgb));
 
   // Ход рисования. Набросок появляется не весь сразу и не ровной волной:
   // от головы наружу, пятнами и вытянутыми вдоль штриха полосами — как идёт рука.
@@ -93,14 +93,14 @@ export function sketchSkin(c: SkinContext): N {
    */
   const drawnAt = (p: N, radius: number): N => {
     const d0: N = viewDist(p).toVar();
-    const n0: N = normalTex.sample(p).xyz.toVar();
+    const n0: N = normalAt(p).xyz.toVar();
     const l0: N = lum(p).toVar();
     let dz: N = float(0);
     let dn: N = float(0);
     let dl: N = float(0);
     for (const t of cross(pxUV.mul(radius))) {
       dz = dz.add(abs(viewDist(p.add(t)).sub(d0)));
-      dn = dn.add(length(normalTex.sample(p.add(t)).xyz.sub(n0)));
+      dn = dn.add(length(normalAt(p.add(t)).xyz.sub(n0)));
       dl = dl.add(abs(lum(p.add(t)).sub(l0)));
     }
     return max(

@@ -37,6 +37,11 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   // ?shots=<набор> — снять контрольные кадры и ничего больше не делать (только dev).
   const shotSet = import.meta.env.DEV ? params.get('shots') : null;
+  // ?freeze=<кадр> — замереть в состоянии контрольного кадра (для снимка всей страницы),
+  // ?perf=<набор> — замерить время кадра. Тоже только dev; обычный цикл в них не идёт.
+  const freezeShot = import.meta.env.DEV ? params.get('freeze') : null;
+  const perfSet = import.meta.env.DEV ? params.get('perf') : null;
+  const staged = Boolean(shotSet || freezeShot || perfSet);
   // Недавно теряли видеокарту — пробуем запасной рендер, а потом сдаёмся (core/recovery.ts).
   const recovery = recoveryPlan();
   if (recovery.giveUp) throw new Error('видеокарта теряется раз за разом');
@@ -49,15 +54,19 @@ async function boot() {
   });
   await renderer.init(); // WebGPU, а если его нет — сам откатится на WebGL 2
   renderer.toneMapping = THREE.NoToneMapping;
-  if (!shotSet) guardDevice(renderer, () => delete root.dataset.ready);
+  if (!staged) guardDevice(renderer, () => delete root.dataset.ready);
   // Контрольные кадры всегда снимаются в полном качестве.
-  const quality = createQuality(shotSet ? 'high' : levelFrom(params.get('q')));
+  const quality = createQuality(staged ? 'high' : levelFrom(params.get('q')));
 
   const stage = createStage();
   const { scene, camera } = stage;
   tag(scene, ID.stage);
 
-  const actor = await loadActor(`${import.meta.env.BASE_URL}models/teto.vrm`);
+  // Ход загрузки модели виден заставке: переменная --load на <html>, 0…1.
+  const actor = await loadActor(`${import.meta.env.BASE_URL}models/teto.vrm`, (loaded) =>
+    root.style.setProperty('--load', loaded.toFixed(3)),
+  );
+  root.style.setProperty('--load', '1');
   tag(actor.root, ID.actor);
   scene.add(actor.root);
   stage.setHeadHeight(actor.headY);
@@ -77,8 +86,12 @@ async function boot() {
     [(clientX / innerWidth) * 2 - 1, 1 - (clientY / innerHeight) * 2] as const;
   const input = createInput((clientX, clientY) => {
     const [nx, ny] = ndcOf(clientX, clientY);
+    const x = clientX / innerWidth;
+    const y = clientY / innerHeight;
     // Попали в персонажа — он реагирует, а в точке клика расходится чернильное кольцо.
-    if (actor.poke?.(nx, ny, camera)) trail.splash(clientX / innerWidth, clientY / innerHeight);
+    const zone = actor.poke?.(nx, ny, camera) ?? null;
+    if (zone) trail.splash(x, y);
+    for (const part of parts) part.poke?.({ x, y, zone });
   });
   const pointer = input.pointer;
 
@@ -162,10 +175,11 @@ async function boot() {
     u.pointer.value.set(pointer.x, pointer.y);
     // Радиус задан в долях высоты; на узком экране линзу уменьшаем, чтобы не съедала всю ширину.
     const lensRest = 0.2 * clamp(aspect * 0.9, 0.55, 1) * (1 + pointer.press * 0.9);
-    u.lens.value = lensRadius(q, lensRest, Math.hypot(aspect, 1) + 0.15);
+    const lens = lensRadius(q, lensRest, Math.hypot(aspect, 1) + 0.15);
+    u.lens.value = lens;
     u.clock.value = t;
 
-    const frame: Frame = { dt, t, still, s, chapter, q, aspect, subjectX, pointer, lensRest };
+    const frame: Frame = { dt, t, still, s, chapter, q, aspect, subjectX, pointer, lensRest, lens, idle: env.idle ?? 0 };
 
     // След виден только в спокойной части главы: во время заливки он бы мешал переходу.
     u.trailGain.value = still ? 0 : smooth(clamp((q - 0.15) / 0.1, 0, 1)) * (1 - smooth(clamp((q - 0.5) / 0.12, 0, 1)));
@@ -210,7 +224,7 @@ async function boot() {
     const still = reducedMotion.matches;
     const vh = sections[0]?.offsetHeight || innerHeight;
     const idle = input.idle(now);
-    step(dt, { s: scrollY / vh, still, roam: !still && idle });
+    step(dt, { s: scrollY / vh, still, roam: !still && idle, idle: Math.max(0, now - pointer.lastMove) / 1000 });
 
     // Над персонажем курсор становится «рукой»: тут можно кликнуть.
     // Берём настоящее положение мыши, а не сглаженную линзу.
@@ -226,7 +240,7 @@ async function boot() {
   step(0, { s: scrollY / (sections[0]?.offsetHeight || innerHeight), still: reducedMotion.matches, roam: false });
   render();
 
-  if (!shotSet) {
+  if (!staged) {
     renderer.setAnimationLoop(frame);
     // В скрытой вкладке не считаем ничего; при возврате время не делает скачка.
     document.addEventListener('visibilitychange', () => {
@@ -251,6 +265,34 @@ async function boot() {
       resize,
       reset,
       step,
+      scrollTo(s) {
+        const vh = sections[0]?.offsetHeight || innerHeight;
+        scrollTo({ top: Math.round(s) * vh, behavior: 'instant' });
+      },
+      async sync() {
+        // Дождаться, пока видеокарта действительно дорисует кадр.
+        const device = (renderer.backend as { device?: { queue: { onSubmittedWorkDone(): Promise<void> } } }).device;
+        if (isWebGPU && device) {
+          await device.queue.onSubmittedWorkDone();
+          return;
+        }
+        // На WebGL finish() в Chrome возвращается сразу; ставим «забор» и ждём его.
+        const gl = renderer.getContext() as unknown as WebGL2RenderingContext;
+        const fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        gl.flush();
+        if (!fence) return;
+        const channel = new MessageChannel(); // setTimeout округлял бы ожидание до 4 мс
+        await new Promise<void>((resolve) => {
+          channel.port1.onmessage = () => {
+            const status = gl.clientWaitSync(fence, 0, 0);
+            if (status === gl.TIMEOUT_EXPIRED && !gl.isContextLost()) channel.port2.postMessage(0);
+            else resolve();
+          };
+          channel.port2.postMessage(0);
+        });
+        gl.deleteSync(fence);
+        channel.port1.close();
+      },
       render() {
         // three обновляет проход сцены раз за «кадр», а номер кадра двигает его
         // собственный цикл rAF. Здесь кадры идут подряд в одной задаче, без rAF,
@@ -259,7 +301,7 @@ async function boot() {
         render();
       },
     };
-    const { runShots } = await import('./core/capture');
+    const { freezeAt, runPerf, runShots } = await import('./core/capture');
     /** Снять контрольные кадры из консоли; обычный цикл на это время останавливается. */
     const shots = async (set = 'current', only?: string[]) => {
       renderer.setAnimationLoop(null);
@@ -272,6 +314,11 @@ async function boot() {
     };
     (window as unknown as Record<string, unknown>).__kimera = { scene, camera, actor, pointer, renderer, pipeline, u, debugView, frame, rig, shots, quality, THREE };
     if (shotSet) await runShots(rig, shotSet, params.get('only')?.split(','));
+    if (perfSet) await runPerf(rig, perfSet);
+    if (freezeShot) {
+      freezeAt(rig, freezeShot);
+      (window as unknown as Record<string, unknown>).__frozen = true;
+    }
   }
 }
 

@@ -6,12 +6,13 @@ import { exp, float, floor, length, mix, saturate, smoothstep, vec2, vec3 } from
 import { hash21, paint, toLinear, type N, type SkinContext } from './context';
 
 export function defaultSkin(c: SkinContext): N {
-  const { uv, css, pxUV, colorTex, viewDist, isFg, cross, diag, lin, dist, fg, edge, heads } = c;
+  const { uv, css, pxUV, colorAt, viewDist, isFg, cross, diag, edgeAt, lin, dist, fg, heads } = c;
+  const edge: N = edgeAt(uv, 1.25);
 
   let blurred: N = vec3(0);
   let cover: N = fg;
   for (const t of diag(pxUV.mul(0.75))) {
-    blurred = blurred.add(colorTex.sample(uv.add(t)).rgb);
+    blurred = blurred.add(colorAt(uv.add(t)).rgb);
     cover = cover.add(isFg(viewDist(uv.add(t))));
   }
   cover = cover.div(5.0);

@@ -1,11 +1,11 @@
 // Снимает контрольные кадры в безголовом Chrome.
 //
 //   node scripts/shots.mjs [набор] [--webgpu] [--only=имя,имя]
+//   node scripts/shots.mjs --perf [--webgpu]      замер времени кадра вместо съёмки
 //
-// По умолчанию кадры снимаются запасным рендером WebGL 2: в безголовом Chrome на
-// Linux он идёт через настоящую видеокарту, а WebGPU достаётся только программный
-// адаптер, который теряет устройство. Кадры WebGPU снимаются из обычного браузера:
-// в консоли dev-сборки `await __kimera.shots('имя-набора')`.
+// По умолчанию кадры снимаются запасным рендером WebGL 2, с --webgpu — основным.
+// Оба идут через настоящую видеокарту; для WebGPU в безголовом режиме на Linux
+// обязателен флаг --disable-vulkan-surface, без него достаётся программный адаптер.
 //
 // Поднимает свой dev-сервер, открывает страницу с ?shots=<набор>, ждёт, пока она
 // снимет все кадры (см. src/core/capture.ts), и кладёт их в shots/<набор>/.
@@ -21,7 +21,8 @@ import { createServer } from 'vite';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const webgl = !args.includes('--webgpu');
-const set = args.find((a) => !a.startsWith('--')) ?? 'current';
+const perf = args.includes('--perf');
+const set = args.find((a) => !a.startsWith('--')) ?? (perf ? 'perf' : 'current');
 if (!/^[\w.-]+$/.test(set)) throw new Error(`плохое имя набора: ${set}`);
 
 const candidates = [
@@ -41,13 +42,15 @@ const server = await createServer({ root, logLevel: 'warn', server: { port: 5199
 await server.listen();
 const port = server.httpServer.address().port;
 const only = args.find((a) => a.startsWith('--only='))?.slice(7);
-const url = `http://localhost:${port}/?shots=${set}${webgl ? '&webgl' : ''}${only ? `&only=${only}` : ''}`;
+const url = `http://localhost:${port}/?${perf ? 'perf' : 'shots'}=${set}${webgl ? '&webgl' : ''}${only ? `&only=${only}` : ''}`;
 // Флаги графики можно подменить целиком: SHOTS_GPU_FLAGS="--use-angle=vulkan …"
 const gpuFlags = process.env.SHOTS_GPU_FLAGS?.split(' ').filter(Boolean) ?? [
   '--ignore-gpu-blocklist',
   '--use-gl=angle',
   '--use-angle=gl-egl',
   '--enable-unsafe-webgpu',
+  '--enable-features=Vulkan',
+  '--disable-vulkan-surface',
 ];
 
 const profile = await mkdtemp(path.join(tmpdir(), 'kimera-shots-'));
@@ -76,7 +79,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   });
 }
 
-const doneFile = path.join(out, '_done.json');
+const doneFile = path.join(out, perf ? '_perf.json' : '_done.json');
 const deadline = Date.now() + 240_000;
 let failed = '';
 while (!existsSync(doneFile)) {
@@ -100,5 +103,12 @@ if (failed) {
   process.exit(1);
 }
 const done = JSON.parse(await readFile(doneFile, 'utf8'));
-console.log(`[shots] ${set}: ${done.shots.length} кадров, рендер ${done.backend} → shots/${set}/`);
+if (perf) {
+  console.log(`[perf] ${done.backend}, ${done.size}; 16.7 мс — потолок для 60 кадров в секунду`);
+  for (const row of done.rows) {
+    console.log(`  ${row.name.padEnd(22)} ${row.ms.toFixed(1).padStart(6)} мс на кадр, из них шаг симуляции ${row.cpu.toFixed(1)} мс`);
+  }
+} else {
+  console.log(`[shots] ${set}: ${done.shots.length} кадров, рендер ${done.backend} → shots/${set}/`);
+}
 console.log(`[shots] ${done.gpu}`);

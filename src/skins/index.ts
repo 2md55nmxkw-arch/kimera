@@ -6,7 +6,7 @@
 // шкурами; линза под курсором сшивает две из них в одном кадре.
 //
 // Каждая шкура живёт в своём файле и не знает о соседних. Здесь только список и сшивка.
-import { Fn, abs, atan, float, fract, fwidth, length, max, mix, mx_noise_float, saturate, smoothstep, step, vec3, vec4 } from 'three/tsl';
+import { Fn, If, abs, atan, float, fract, fwidth, length, max, mix, mx_noise_float, saturate, smoothstep, step, vec3, vec4 } from 'three/tsl';
 import { createContext, pick, type N, type SkinContext, type SkinUniforms } from './context';
 import { defaultSkin } from './default';
 import { mosaicSkin } from './mosaic';
@@ -30,17 +30,9 @@ export const SKINS = LIST.map((s) => s.name);
 export function buildComposite(scenePass: N, u: SkinUniforms, trail: N): N {
   return Fn(() => {
     const c = createContext(scenePass, u);
-    const { uv, css, pxH, asp, lin, idTex } = c;
+    const { uv, css, pxH, asp, lin, idAt } = c;
 
-    const skins: N[] = LIST.map((s) => s.build(c));
-    let colA: N = vec3(0);
-    let colB: N = vec3(0);
-    skins.forEach((s, i) => {
-      colA = colA.add(s.mul(pick(u.skinA, i)));
-      colB = colB.add(s.mul(pick(u.skinB, i)));
-    });
-
-    // ── сшивка ──────────────────────────────────────────────────────────
+    // ── линза и след: какой из двух шкур принадлежит пиксель ─────────────
     const p: N = uv.sub(u.pointer).mul(asp).toVar();
     const wobble: N = mx_noise_float(vec3(p.mul(3.5), u.clock.mul(0.4)))
       .mul(0.03)
@@ -60,8 +52,24 @@ export function buildComposite(scenePass: N, u: SkinUniforms, trail: N): N {
       .sub(smoothstep(inkWidth.mul(0.7), inkWidth.mul(2.0), abs(ink.sub(0.35))))
       .mul(u.trailGain)
       .mul(float(1).sub(inside));
+    const toB: N = max(inside, inkMask).toVar(); // 0 — шкура A, 1 — шкура B
 
-    const stitched: N = mix(colA, colB, max(inside, inkMask)).toVar();
+    // ── шкуры ───────────────────────────────────────────────────────────
+    // Шкура дорогая, поэтому считается только там, где она видна: снаружи линзы
+    // одна, внутри другая, обе сразу — лишь на узкой кромке между ними.
+    const colA: N = vec3(0).toVar();
+    const colB: N = vec3(0).toVar();
+    LIST.forEach((skin, i) => {
+      const isA: N = pick(u.skinA, i);
+      const isB: N = pick(u.skinB, i);
+      const seen: N = isA.mul(float(1).sub(toB)).add(isB.mul(toB));
+      If(seen.greaterThan(0), () => {
+        const col: N = skin.build(c).toVar();
+        colA.addAssign(col.mul(isA));
+        colB.addAssign(col.mul(isB));
+      });
+    });
+    const stitched: N = mix(colA, colB, toB).toVar();
 
     // Шов: тонкое кольцо и стежки поперёк. Рисуется инверсией, поэтому виден на любой шкуре.
     const seamOn: N = smoothstep(0.0, 0.03, u.lens).mul(float(1).sub(smoothstep(0.9, 1.6, u.lens)));
@@ -74,7 +82,7 @@ export function buildComposite(scenePass: N, u: SkinUniforms, trail: N): N {
     const final: N = mix(stitched, vec3(1).sub(stitched), seam);
     // Отладка: raw = 1 — сцена без шкур, raw = 2 — слой меток
     // (красный — номер предмета, зелёный — ярус тела, синий — рука).
-    const id: N = idTex.sample(uv);
+    const id: N = idAt(uv);
     const idView: N = vec3(fract(id.r.mul(0.37)), id.g, abs(id.b));
     const plain: N = mix(lin, idView, saturate(u.raw.sub(1)));
     return vec4(mix(final, plain, saturate(u.raw)), 1);
