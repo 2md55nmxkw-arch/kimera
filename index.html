@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>KIMERA — one body, three skins</title>
+    <meta name="description" content="One body shown three ways at once. A shader piece with Kasane Teto." />
+    <meta name="theme-color" content="#0b0b0c" />
+    <meta name="referrer" content="no-referrer" />
+  </head>
+  <body>
+    <canvas id="stage" aria-hidden="true"></canvas>
+
+    <div id="veil" aria-hidden="true"><span>mixing inks</span></div>
+
+    <header class="hud hud-top">
+      <span class="mark">Kimera <span lang="ja">キメラ</span></span>
+      <span class="count"><b id="hud-index">01</b><span> / 03</span><i id="hud-name">Default</i></span>
+    </header>
+
+    <main class="copy">
+      <section>
+        <p class="kana" lang="ja" aria-hidden="true">素顔</p>
+        <h1 class="word">Kimera</h1>
+        <p class="lede">One body, three skins.</p>
+        <p class="plate">
+          <b>01 — Default</b>
+          The model as it is, lit and nothing more. She began as an April Fools’ hoax in 2008 and
+          is a chimera by design, so the two skins that follow are stitched over this same body.
+        </p>
+      </section>
+
+      <section>
+        <p class="kana" lang="ja" aria-hidden="true">硝子</p>
+        <h2 class="word">Mosaic</h2>
+        <p class="plate">
+          <b>02 — Mosaic</b>
+          A rose window cut around her head: fine shards for the figure, large ones for the glass
+          behind. Each shard takes one colour from the point under its centre, and the ones tilted
+          toward your cursor catch the light.
+        </p>
+      </section>
+
+      <section>
+        <p class="kana" lang="ja" aria-hidden="true">素描</p>
+        <h2 class="word">Sketch</h2>
+        <p class="plate">
+          <b>03 — Sketch</b>
+          Pencil on paper, redrawn eight times a second. Every line is three light passes of an
+          unsteady hand, the shadows are only hinted at, and the construction lines were never
+          erased. The loop closes here: under the lens is the first skin again.
+        </p>
+      </section>
+    </main>
+
+    <div class="rail" aria-hidden="true"><i></i></div>
+
+    <footer class="hud hud-bottom">
+      <span class="hint">move: peek · hold: tear · scroll: shed</span>
+      <span class="tech" id="hud-tech">starting</span>
+      <span class="credit">Kasane Teto © TWINDRILL · fan work</span>
+    </footer>
+
+    <p class="fallback">This piece needs WebGPU or WebGL 2, and neither is available in this browser.</p>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+node_modules
+dist
+.vite
+*.log
+# Модель персонажа не коммитим: у VRM своя лицензия на распространение.
+public/models/*.vrm

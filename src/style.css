@@ -1,0 +1,357 @@
+:root {
+  --ink: #0b0b0c;
+  --paper: #f4efe4;
+  --pink: #ff3b6b;
+  --pad: clamp(1.1rem, 3.6vw, 3.5rem);
+  --display: 'Dela Gothic One', 'Arial Black', sans-serif;
+  --serif: 'Instrument Serif', Georgia, serif;
+  --mono: 'Martian Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+html {
+  background: var(--ink);
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  -webkit-text-size-adjust: 100%;
+}
+html::-webkit-scrollbar {
+  display: none;
+}
+
+body {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: #fff;
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Холст лежит под текстом. У предков текста нет своего контекста наложения,
+   иначе режим difference перестанет смешиваться с холстом. */
+#stage {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: pan-y;
+}
+
+/* ── главы ─────────────────────────────────────────────────────────────── */
+
+.copy {
+  position: relative;
+}
+
+.copy section {
+  position: relative;
+  height: 100svh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: clamp(0.6rem, 1.6vh, 1.2rem);
+  padding: var(--pad);
+  padding-bottom: calc(var(--pad) + 3.2rem);
+  pointer-events: none;
+  /* Именованная шкала: прогресс самой секции, а не каждого элемента в ней. */
+  view-timeline: --chapter block;
+}
+
+.word {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(2.7rem, 11vw, 12.5rem);
+  line-height: 0.84;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+  color: #fff;
+  mix-blend-mode: difference;
+  user-select: none;
+}
+
+.lede {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.5rem, 3.4vw, 3.4rem);
+  line-height: 1;
+  color: #fff;
+  mix-blend-mode: difference;
+}
+
+.kana {
+  position: absolute;
+  top: calc(var(--pad) + 3.4rem);
+  left: var(--pad);
+  writing-mode: vertical-rl;
+  font-family: var(--display);
+  font-size: clamp(1.3rem, 2.6vw, 2.5rem);
+  letter-spacing: 0.18em;
+  color: #fff;
+  mix-blend-mode: difference;
+  user-select: none;
+}
+
+/* Подпись — как музейная этикетка: плотная плашка, читается на любой шкуре. */
+.plate {
+  max-width: 37ch;
+  padding: 0.85em 1em 0.95em;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: clamp(0.66rem, 0.35vw + 0.6rem, 0.82rem);
+  line-height: 1.6;
+  font-variation-settings: 'wdth' 92;
+  pointer-events: auto;
+}
+.plate b {
+  display: block;
+  margin-bottom: 0.45em;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--pink);
+}
+.plate [lang='ja'] {
+  font-family: var(--display);
+}
+
+/* ── служебные строки ──────────────────────────────────────────────────── */
+
+.hud {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0 var(--pad);
+  pointer-events: none;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.hud-top {
+  top: calc(var(--pad) * 0.8);
+  mix-blend-mode: difference;
+}
+.mark {
+  font-family: var(--display);
+  font-size: clamp(1rem, 1.5vw, 1.35rem);
+  letter-spacing: 0.02em;
+}
+.mark [lang='ja'] {
+  margin-left: 0.4em;
+  font-size: 0.72em;
+  letter-spacing: 0.12em;
+}
+.count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.15em;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+.count b {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.4rem, 2.4vw, 2.2rem);
+  letter-spacing: 0;
+}
+.count i {
+  margin-left: 1.2em;
+  font-style: normal;
+}
+
+.hud-bottom {
+  bottom: calc(var(--pad) * 0.8);
+  font-size: 0.62rem;
+}
+.hud-bottom span {
+  padding: 0.45em 0.7em;
+  background: var(--ink);
+  color: var(--paper);
+  white-space: nowrap;
+}
+.hud-bottom .tech {
+  color: var(--pink);
+}
+
+/* Полоса прогресса справа: растёт вместе с прокруткой, без единой строки JS. */
+.rail {
+  position: fixed;
+  z-index: 2;
+  top: 22vh;
+  bottom: 22vh;
+  right: calc(var(--pad) * 0.8);
+  width: 2px;
+  background: rgb(255 255 255 / 0.25);
+  mix-blend-mode: difference;
+  pointer-events: none;
+}
+.rail i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  transform-origin: top;
+  transform: scaleY(0);
+}
+
+/* ── загрузка и запасной вариант ───────────────────────────────────────── */
+
+#veil {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.68rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  transition:
+    opacity 0.7s ease,
+    visibility 0s 0.7s;
+}
+html[data-ready] #veil {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.fallback {
+  display: none;
+}
+html[data-gfx='none'] .fallback {
+  display: block;
+  position: fixed;
+  z-index: 3;
+  top: 50%;
+  left: var(--pad);
+  right: var(--pad);
+  translate: 0 -50%;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: clamp(1.2rem, 2.4vw, 2rem);
+  color: var(--paper);
+}
+html[data-gfx='none'] #stage {
+  display: none;
+}
+
+/* ── анимации, привязанные к прокрутке (чистый CSS) ────────────────────── */
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: view()) {
+    .word,
+    .lede,
+    .kana,
+    .plate {
+      animation: pass-through linear both;
+      animation-timeline: --chapter;
+      animation-range: entry 0% exit 100%;
+    }
+    .lede {
+      animation-name: pass-through-slow;
+    }
+    .plate {
+      animation-name: pass-through-plate;
+    }
+
+    .rail i {
+      animation: grow linear both;
+      animation-timeline: scroll(root);
+    }
+  }
+}
+
+@keyframes pass-through {
+  0% {
+    opacity: 0;
+    transform: translateY(18vh) skewY(4deg);
+  }
+  42%,
+  58% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-18vh) skewY(-4deg);
+  }
+}
+@keyframes pass-through-slow {
+  0% {
+    opacity: 0;
+    transform: translateX(-6vw);
+  }
+  45%,
+  55% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(6vw);
+  }
+}
+@keyframes pass-through-plate {
+  0%,
+  30% {
+    opacity: 0;
+    transform: translateY(2rem);
+  }
+  46%,
+  54% {
+    opacity: 1;
+    transform: none;
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: translateY(-2rem);
+  }
+}
+@keyframes grow {
+  to {
+    transform: scaleY(1);
+  }
+}
+
+/* ── узкие экраны ──────────────────────────────────────────────────────── */
+
+@media (max-aspect-ratio: 115/100) {
+  .hud-bottom .hint,
+  .count i {
+    display: none;
+  }
+  .hud-bottom {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 0.35rem;
+    font-size: 0.56rem;
+  }
+  .copy section {
+    padding-bottom: calc(var(--pad) + 4.6rem);
+  }
+  .kana {
+    top: calc(var(--pad) + 5rem);
+    left: auto;
+    right: var(--pad);
+  }
+  .plate {
+    max-width: 100%;
+  }
+}
