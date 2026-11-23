@@ -7,6 +7,7 @@
 import {
   abs,
   atan,
+  clamp as clampNode,
   float,
   floor,
   fract,
@@ -14,17 +15,16 @@ import {
   luminance,
   max,
   mix,
-  mx_noise_float,
   saturate,
   smoothstep,
   step,
   uniform,
   vec2,
-  vec3,
 } from 'three/tsl';
 import type { Frame, Part } from '../core/contracts';
 import { clamp, smooth } from '../core/math';
 import { hash21, paint, rot, srgb, toLinear, type N, type SkinContext } from './context';
+import { GAP_CELLS, HAND_CELL, HAND_ROWS, invalidateSketchPrep, sketchPrep } from './sketch-prep';
 
 /** Униформы, нужные только наброску. */
 export const sketchU = {
@@ -45,6 +45,7 @@ export function createSketchDraw(index: number, freeze: { draw: number }): Part 
     reset() {
       draw = 1;
       drawnBefore = false;
+      invalidateSketchPrep();
     },
     step({ dt, still, chapter, q }: Frame) {
       if (still) {
@@ -65,21 +66,31 @@ export function createSketchDraw(index: number, freeze: { draw: number }): Part 
 export function sketchSkin(c: SkinContext): N {
   const { u, uv, css, pxUV, pxH, asp, colorAt, normalAt, isFigureAt, viewDist, cross, lin, fg, fromHead, heads } = c;
 
-  const boil: N = floor(u.clock.mul(8.0)).div(8.0).mul(3.1);
-  /** Дрожание руки: смещение в CSS-пикселях. */
-  const jitter = (scale: number, amp: number, salt: number): N =>
-    vec2(
-      mx_noise_float(vec3(css.mul(scale), boil.add(salt))),
-      mx_noise_float(vec3(css.mul(scale).add(41.3), boil.add(salt + 9.1))),
-    ).mul(amp);
+  // Весь шум наброска — дрожание руки, нажим, бумага, разрывы штрихов — посчитан
+  // заранее в текстуры (sketch-prep.ts) теми же формулами: раньше он считался в
+  // каждом пикселе и съедал три четверти кадра.
+  const prep = sketchPrep(u);
+  /** Полоса текстуры «руки»: четыре поля шума, −1…1 (что в какой полосе — см. HAND). */
+  const handRow = (row: number): N => {
+    const cell: N = css.div(HAND_CELL);
+    // Полосы лежат одна под другой; по вертикали не выходим за свою.
+    const y: N = clampNode(cell.y, 0.5, prep.handSize.y.sub(0.5)).add(prep.handSize.y.mul(row));
+    return prep.hand
+      .sample(vec2(cell.x.div(prep.handSize.x), y.div(prep.handSize.y.mul(HAND_ROWS))))
+      .level(0)
+      .toVar();
+  };
+  const hand0: N = handRow(0);
+  const hand1: N = handRow(1);
+  const hand2: N = handRow(2);
+  const hand3: N = handRow(3);
+  const sheet: N = prep.sheet.sample(css.mul(u.dpr).div(prep.sheetSize)).level(0).toVar();
   const lum = (p: N): N => luminance(srgb(colorAt(p).rgb));
 
   // Ход рисования. Набросок появляется не весь сразу и не ровной волной:
   // от головы наружу, пятнами и вытянутыми вдоль штриха полосами — как идёт рука.
   // order — «когда дойдёт очередь до этой точки», 0 у лица … 1 на краях.
-  const patches: N = mx_noise_float(vec3(css.mul(0.011), 31.0)).mul(0.5).add(0.5);
-  const streaks3: N = mx_noise_float(vec3(rot(css, 0.6).mul(vec2(0.0035, 0.045)), 47.0)).mul(0.5).add(0.5);
-  const order: N = saturate(heads.mul(0.075).add(patches.mul(0.28)).add(streaks3.mul(0.22))).toVar();
+  const order: N = saturate(heads.mul(0.075).add(sheet.b.div(2.0))).toVar();
   /** Доля общего хода, отведённая этапу [from, to], 0…1. */
   const phase = (from: number, to: number): N => saturate(sketchU.draw.sub(from).div(to - from));
   /** Нарисован ли в этой точке слой, который рисуют на этапе [from, to]. */
@@ -117,26 +128,20 @@ export function sketchSkin(c: SkinContext): N {
   };
 
   // Бумага: кремовая, с лёгким зерном и волокнами, к краям чуть темнее.
-  const fibre: N = mx_noise_float(vec3(css.x.mul(0.9), css.y.mul(0.11), 3.0))
-    .mul(0.6)
-    .add(mx_noise_float(vec3(css.mul(0.55), 8.0)).mul(0.4));
-  const tooth: N = hash21(floor(css))
-    .mul(0.5)
-    .add(mx_noise_float(vec3(css.mul(0.45), 1.0)).mul(0.25).add(0.5))
-    .toVar();
+  const tooth: N = sheet.g.mul(1.3).toVar();
   const paper: N = paint('#f1ebdb')
-    .mul(fibre.mul(0.022).add(1.0))
-    .mul(mx_noise_float(vec3(css.mul(0.005), 5.0)).mul(0.03).add(1.0))
+    .mul(sheet.r.div(8.0).add(0.94))
     .mul(float(1).sub(length(uv.sub(0.5)).mul(0.17)));
 
   // Три прохода. Второй и третий — «ищущие»: сдвинуты, бледнее и с разрывами.
-  const j1: N = jitter(0.02, 1.5, 0.0);
+  const j1: N = hand0.xy.mul(1.5);
   const lineA: N = drawnAt(uv.add(j1.mul(pxUV)), 0.85);
-  const lineB: N = drawnAt(uv.add(jitter(0.011, 3.2, 5.0).add(vec2(1.8, -1.2)).mul(pxUV)), 0.8);
-  const lineC: N = drawnAt(uv.add(jitter(0.007, 4.6, 11.0).add(vec2(-2.1, 1.6)).mul(pxUV)), 0.8);
+  const lineB: N = drawnAt(uv.add(hand0.zw.mul(3.2).add(vec2(1.8, -1.2)).mul(pxUV)), 0.8);
+  const lineC: N = drawnAt(uv.add(hand1.xy.mul(4.6).add(vec2(-2.1, 1.6)).mul(pxUV)), 0.8);
   const contour: N = silhouetteAt(uv.add(j1.mul(pxUV)), 1.5);
   // Нажим меняется вдоль линии; местами штрих совсем отрывается от бумаги.
-  const press = (salt: number): N => mx_noise_float(vec3(css.mul(0.012), boil.add(salt))).mul(0.5).add(0.5);
+  const PRESS: Record<number, N> = { 1: hand2.z, 2: hand2.w, 3: hand3.x, 4: hand3.y, 6: hand3.z };
+  const press = (salt: number): N => PRESS[salt].mul(0.5).add(0.5);
   // Сначала идут бледные «ищущие» проходы, потом по ним — уверенная линия и силуэт.
   const searching: N = drawn(0.1, 0.55).toVar();
   const confident: N = drawn(0.32, 0.82).toVar();
@@ -150,17 +155,16 @@ export function sketchSkin(c: SkinContext): N {
   // На стенах и полу декорации штрихуется только настоящая тень: ровно освещённая
   // стена остаётся чистой бумагой, иначе рисунок тонет в штриховке.
   const tone: N = mix(saturate(luminance(srgb(lin)).mul(1.55)), luminance(srgb(lin)), isFigureAt(uv)).toVar();
-  const hatchAt: N = css.add(jitter(0.006, 5.0, 2.0));
+  const hatchAt: N = css.add(hand1.zw.mul(5.0));
   const hatch = (angle: number, spacing: number, width: number, salt: number, gaps: number): N => {
     const r: N = rot(hatchAt, angle);
     const across: N = r.y.div(spacing);
     const id: N = floor(across);
     const off: N = abs(fract(across).sub(0.5)).mul(spacing);
     const w: N = hash21(vec2(id, salt)).mul(0.7).add(0.5).mul(width);
-    const broken: N = step(
-      gaps,
-      mx_noise_float(vec3(r.x.mul(0.03).add(hash21(vec2(id, salt + 3.0)).mul(60.0)), id.mul(0.37), boil.add(salt))),
-    );
+    // Разрывы: шум вдоль штриха из плитки, слой — по номеру штриховки (1, 2, 3).
+    const along: N = vec2(r.x.mul(0.03).add(hash21(vec2(id, salt + 3.0)).mul(60.0)), id.mul(0.37));
+    const broken: N = step(gaps, prep.gaps.sample(along.div(GAP_CELLS)).level(0).element(salt - 1));
     // Каждый штрих начинают в свой момент и ведут от начала к концу.
     const turn: N = hash21(vec2(id, salt + 7.0)).mul(0.6)
       .add(fract(r.x.div(700.0).add(hash21(vec2(id, salt + 5.0)))).mul(0.25))
@@ -189,7 +193,7 @@ export function sketchSkin(c: SkinContext): N {
 
   // Румянец: по три-четыре коротких косых штриха на каждой щеке.
   const blushAt = (cheek: N): N => {
-    const q: N = uv.sub(cheek).mul(asp).div(u.headSize).add(jitter(0.03, 0.012, 15.0));
+    const q: N = uv.sub(cheek).mul(asp).div(u.headSize).add(hand0.xy.mul(0.012));
     const inside: N = float(1).sub(smoothstep(0.55, 1.0, length(q.div(vec2(0.24, 0.12)))));
     const lines: N = abs(fract(q.x.mul(0.5).add(q.y.mul(0.87)).div(0.075)).sub(0.5));
     return float(1).sub(smoothstep(0.08, 0.2, lines)).mul(inside);
@@ -198,7 +202,7 @@ export function sketchSkin(c: SkinContext): N {
 
   // Построение: круг головы и две осевые. С него рисунок начинается: круг обводят
   // по часовой от макушки, потом проводят вертикаль сверху вниз и горизонталь слева направо.
-  const guide: N = fromHead.add(jitter(0.015, 1.5, 7.0).mul(pxH));
+  const guide: N = fromHead.add(hand2.xy.mul(1.5).mul(pxH));
   const thin = (dd: N): N => float(1).sub(smoothstep(pxH.mul(0.35), pxH.mul(1.5), abs(dd)));
   const setup: N = phase(0.0, 0.16);
   const aroundHead: N = fract(atan(guide.x, guide.y.negate()).div(6.2832).add(1.0));

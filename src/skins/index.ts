@@ -11,6 +11,7 @@ import { createContext, pick, type N, type SkinContext, type SkinUniforms } from
 import { defaultSkin } from './default';
 import { mosaicSkin } from './mosaic';
 import { sketchSkin } from './sketch';
+import { setSketchIndex } from './sketch-prep';
 
 export { createUniforms, type SkinUniforms } from './context';
 
@@ -22,6 +23,8 @@ const LIST: { name: string; build(c: SkinContext): N }[] = [
 ];
 
 export const SKINS = LIST.map((s) => s.name);
+// Заготовки наброска считаются только в главах, где он виден.
+setSketchIndex(SKINS.indexOf('Sketch'));
 
 /**
  * @param scenePass проход сцены с G-буфером (core/gbuffer.ts)
