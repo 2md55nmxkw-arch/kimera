@@ -8,6 +8,8 @@ import './style.css';
 
 import * as THREE from 'three/webgpu';
 import { loadActor } from './actor';
+import { bindLangSwitch, say, type Key } from './content/i18n';
+import { createLabels } from './content/labels';
 import type { Rig } from './core/capture';
 import { chapterAt, lensRadius } from './core/chapters';
 import type { Frame, Part, StepEnv } from './core/contracts';
@@ -21,6 +23,7 @@ import { createTrail } from './fx/trail';
 import { SKINS, buildComposite, createUniforms } from './skins';
 import { createSketchDraw } from './skins/sketch';
 import { createStage } from './stage';
+import { markAt } from './stage/kit';
 import { frameCamera, placeCamera } from './stage/camera';
 
 const root = document.documentElement;
@@ -82,7 +85,8 @@ async function boot() {
   pipeline.outputNode = buildComposite(scenePass, u, trail.node);
 
   const isWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
-  hudTech.textContent = `${isWebGPU ? 'WebGPU' : 'WebGL 2'} · ${actor.kind === 'vrm' ? 'VRM' : 'stand-in figure'}`;
+  say(hudTech, actor.kind === 'vrm' ? 'hud.model' : 'hud.standin', isWebGPU ? 'WebGPU' : 'WebGL 2');
+  bindLangSwitch(document);
 
   const ndcOf = (clientX: number, clientY: number) =>
     [(clientX / innerWidth) * 2 - 1, 1 - (clientY / innerHeight) * 2] as const;
@@ -101,7 +105,42 @@ async function boot() {
   const debugView = { on: false, pos: [0, 1.2, 1], target: [0, 1.2, 0], draw: -1 };
 
   // Части со своим состоянием. Новая механика подключается сюда одной строкой.
-  const parts: Part[] = [createSketchDraw(SKINS.indexOf('Sketch'), debugView)];
+  const labels = createLabels(camera, () => ({
+    x: u.head.value.x * innerWidth,
+    y: u.head.value.y * innerHeight,
+    r: u.headSize.value * innerHeight * 1.15,
+  }));
+  const parts: Part[] = [createSketchDraw(SKINS.indexOf('Sketch'), debugView), labels];
+
+  // ── что к чему привязано ───────────────────────────────────────────────
+  // Гримёрка: анкета. Часть фактов живёт на самой Тето, часть — на вещах.
+  const spot = new THREE.Vector3();
+  const on = (name: string) => () => actor.points[name] ?? null;
+  const at = (name: string) => () => markAt(name, spot);
+  labels.anchor('profile.height', on('top'), 110);
+  labels.anchor('profile.hair', on('drillR'), 150);
+  labels.anchor('profile.uniform', on('body'), -30);
+  labels.anchor('profile.number', on('armL'), 10);
+  labels.anchor('profile.sheet', at('mirror'), -90);
+  labels.anchor('profile.phrase', at('note'), -60);
+  labels.anchor('profile.bread', at('bread'), 180);
+  // Мастерская: двенадцать эпизодов истории — двенадцать лепестков розы вокруг головы.
+  const HISTORY = ['proposal', 'hoax', 'utau', 'fame', 'twindrill', 'piapro', 'day', 'disc', 'decade', 'synthv', 'voices', 'eighteen'];
+  HISTORY.forEach((id, k) => {
+    const a = -Math.PI / 2 + (k / HISTORY.length) * Math.PI * 2; // с макушки по часовой
+    labels.anchorOnScreen(
+      `history.${id}`,
+      (head) => ({ x: head.x + Math.cos(a) * head.r * 2.05, y: head.y + Math.sin(a) * head.r * 2.05 }),
+      (-a * 180) / Math.PI,
+    );
+  });
+  // Стол художника: пометки от руки на листе.
+  labels.anchor('design.eyes', on('face'), 25);
+  labels.anchor('design.hair', on('drillL'), 70);
+  labels.anchor('design.uniform', on('body'), -25);
+  labels.anchor('design.size', on('top'), 115);
+  labels.anchorOnScreen('design.artist', () => ({ x: innerWidth * 0.8, y: innerHeight * 0.74 }), 0, false);
+  labels.anchorOnScreen('design.voice', () => ({ x: innerWidth * 0.8, y: innerHeight * 0.82 }), 0, false);
 
   let subjectX = 0.5; // где на экране стоит персонаж, 0…1
   let aspect = 1;
@@ -163,7 +202,7 @@ async function boot() {
     if (shown !== shownChapter) {
       shownChapter = shown;
       hudIndex.textContent = String(shown + 1).padStart(2, '0');
-      hudName.textContent = SKINS[shown];
+      say(hudName, `skin.${shown}` as Key);
     }
 
     // Курсор давно не двигался (или его нет, как на телефоне) — линза бродит сама.

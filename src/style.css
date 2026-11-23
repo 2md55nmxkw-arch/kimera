@@ -71,7 +71,9 @@ body {
 .word {
   font-family: var(--display);
   font-weight: 400;
-  font-size: clamp(2.7rem, 11vw, 12.5rem);
+  /* Слово рассчитано на шесть букв; длиннее (в переводе) — мельче, чтобы не
+     наезжать на фигуру. Число букв ставит content/i18n.ts. */
+  font-size: calc(clamp(2.7rem, 11vw, 12.5rem) * min(1, 6.2 / var(--chars, 6)));
   line-height: 0.84;
   letter-spacing: -0.035em;
   text-transform: uppercase;
@@ -178,7 +180,7 @@ body {
   bottom: calc(var(--pad) * 0.8);
   font-size: 0.62rem;
 }
-.hud-bottom span {
+.hud-bottom > span {
   padding: 0.45em 0.7em;
   background: var(--ink);
   color: var(--paper);
@@ -229,6 +231,8 @@ body {
 html[data-ready] #veil {
   opacity: 0;
   visibility: hidden;
+  /* Пока заставка гаснет, она уже не должна перехватывать нажатия. */
+  pointer-events: none;
 }
 
 .fallback {

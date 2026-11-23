@@ -87,6 +87,25 @@ export function wall(side: Side): THREE.Group {
   return g;
 }
 
+const marks = new Map<string, THREE.Object3D>();
+
+/**
+ * Именованная точка на декорации (координаты — той группы, в которую она ставится).
+ * К таким точкам привязываются этикетки: точка едет вместе с кругом.
+ */
+export function mark(parent: THREE.Object3D, name: string, x: number, y: number, z: number): void {
+  const point = new THREE.Object3D();
+  point.position.set(x, y, z);
+  parent.add(point);
+  marks.set(name, point);
+}
+
+/** Где сейчас в мире точка с этим именем; null, если такой нет. */
+export function markAt(name: string, out: THREE.Vector3): THREE.Vector3 | null {
+  const point = marks.get(name);
+  return point ? point.getWorldPosition(out) : null;
+}
+
 /** Декорация одного клина. */
 export interface StageSet {
   name: string;

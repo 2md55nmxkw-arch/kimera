@@ -1,0 +1,289 @@
+/* Этикетки, пометки от руки и служебная колонка справа (счётчик, язык, программка). */
+
+.labels {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  --graphite: #2e2e36;
+}
+
+/* ── булавка ───────────────────────────────────────────────────────────── */
+
+.pin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: -0.75rem 0 0 -0.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--pink);
+  color: #fff;
+  font: 500 0.6rem / 1.5rem var(--mono);
+  text-align: center;
+  cursor: pointer;
+  pointer-events: none;
+  opacity: 0;
+  scale: 0.4;
+  box-shadow:
+    0 0 0 2px var(--paper),
+    0 2px 6px rgb(0 0 0 / 0.35);
+  transition:
+    opacity 0.25s,
+    scale 0.3s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+.pin.is-on {
+  opacity: 1;
+  scale: 1;
+  pointer-events: auto;
+}
+/* Найденная булавка успокаивается: бумажная, с тонким контуром. */
+.pin.is-found {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow:
+    0 0 0 1px var(--ink),
+    0 2px 6px rgb(0 0 0 / 0.25);
+}
+.pin.is-open,
+.pin:hover,
+.pin:focus-visible {
+  scale: 1.25;
+  outline: none;
+}
+.pin:focus-visible {
+  box-shadow:
+    0 0 0 2px var(--paper),
+    0 0 0 4px var(--ink);
+}
+/* Ненайденная слегка «дышит», чтобы её заметили. */
+@media (prefers-reduced-motion: no-preference) {
+  .pin.is-on:not(.is-found)::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    border: 1px solid var(--pink);
+    animation: pin-ring 2.4s ease-out infinite;
+  }
+}
+@keyframes pin-ring {
+  from {
+    opacity: 0.9;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 2.1;
+  }
+}
+
+/* ── этикетка ──────────────────────────────────────────────────────────── */
+
+.card {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: min(17rem, calc(100vw - 2rem));
+  padding: 0.85rem 1rem 0.8rem;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 5px 5px 0 var(--ink);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.18s,
+    visibility 0.18s;
+}
+.card.is-on {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+.card-kicker {
+  margin: 0 0 0.35rem;
+  color: #d51f4f;
+  font: 500 0.58rem / 1.2 var(--mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.card-title {
+  margin: 0 0 0.35rem;
+  font: italic 400 1.5rem / 1.05 var(--serif);
+}
+.card-text {
+  margin: 0;
+  font: 400 0.72rem / 1.5 var(--mono);
+}
+.card-source {
+  display: inline-block;
+  margin-top: 0.6rem;
+  color: inherit;
+  font: 400 0.55rem / 1.2 var(--mono);
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+}
+.card-source:hover {
+  opacity: 1;
+}
+.card [lang='ja'],
+.note [lang='ja'] {
+  font-family: system-ui, sans-serif;
+  font-style: normal;
+}
+
+.leader {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 0.18s;
+}
+.leader.is-on {
+  opacity: 1;
+}
+.leader line {
+  stroke: var(--paper);
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 1px var(--ink));
+}
+
+/* ── пометка от руки (глава с наброском) ──────────────────────────────── */
+
+.note {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: 11.5rem;
+  color: var(--graphite);
+  font: 400 1.25rem / 1.05 'Caveat', cursive;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s;
+}
+.note.is-on {
+  opacity: 0.92;
+  pointer-events: auto;
+  /* Сначала рисуется сама фигура, пометки появляются следом. */
+  transition-delay: 1.1s;
+}
+.note-title {
+  display: block;
+  font-weight: 600;
+  font-size: 1.45rem;
+}
+.note-text {
+  display: block;
+}
+.note:focus-visible {
+  outline: 1px dashed var(--graphite);
+  outline-offset: 4px;
+}
+.note-arrow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+.note-arrow path {
+  fill: none;
+  stroke: var(--graphite);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.8;
+}
+
+/* Список для читалок экрана: на экране его нет. */
+.labels-list {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── колонка справа: найдено, язык, программка ────────────────────────── */
+
+.tools {
+  position: fixed;
+  z-index: 4;
+  top: calc(var(--pad) * 0.8 + 3.4rem);
+  right: var(--pad);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+  font: 400 0.62rem / 1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.tools > * {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.45em 0.7em;
+  background: var(--ink);
+  color: var(--paper);
+}
+.tools button,
+.tools a {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.tools a:hover,
+.tools button:hover {
+  color: var(--pink);
+}
+.tools button[aria-pressed='true'] {
+  color: var(--pink);
+}
+.tools #hud-found {
+  font-variant-numeric: tabular-nums;
+}
+.tools [hidden] {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  /* На телефоне этикетка — лист снизу, выноска не нужна. */
+  .card {
+    position: fixed;
+    inset: auto 0.6rem calc(0.6rem + env(safe-area-inset-bottom)) 0.6rem;
+    width: auto;
+    translate: none !important;
+  }
+  .leader {
+    display: none;
+  }
+  /* На узком экране справа стоит вертикальная надпись главы — колонка уходит влево. */
+  .tools {
+    top: calc(var(--pad) * 0.8 + 2.6rem);
+    right: auto;
+    left: var(--pad);
+    align-items: flex-start;
+  }
+  .note {
+    max-width: 8.5rem;
+    font-size: 1.05rem;
+  }
+  .note-title {
+    font-size: 1.2rem;
+  }
+}

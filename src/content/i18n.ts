@@ -42,6 +42,8 @@ const EN = {
   'hud.reset': 'Forget what was found',
   'hud.reset.sure': 'forget?',
   'hud.lang': 'Language',
+  'hud.tools': 'Labels, language, programme',
+  'hud.programme': 'programme',
 
   'group.profile': 'Profile',
   'group.history': 'History',
@@ -85,6 +87,8 @@ const RU: Record<Key, string> = {
   'hud.reset': 'Забыть найденное',
   'hud.reset.sure': 'забыть?',
   'hud.lang': 'Язык',
+  'hud.tools': 'Этикетки, язык, программка',
+  'hud.programme': 'программка',
 
   'group.profile': 'Анкета',
   'group.history': 'История',
@@ -174,7 +178,11 @@ export function say(el: HTMLElement, key: Key, ...args: (string | number)[]): vo
 /** Заполнить всё, что размечено ключами, внутри root. */
 export function applyTo(root: ParentNode): void {
   for (const el of root.querySelectorAll<HTMLElement>('[data-t]')) {
-    if (!said.has(el)) write(el, t(el.dataset.t as Key));
+    if (said.has(el)) continue;
+    const text = t(el.dataset.t as Key);
+    write(el, text);
+    // Крупное слово главы подгоняется под число букв (см. .word в style.css).
+    if (el.classList.contains('word')) el.style.setProperty('--chars', String(text.length));
   }
   for (const el of root.querySelectorAll<HTMLElement>('[data-t-label]')) {
     const text = t(el.dataset.tLabel as Key);

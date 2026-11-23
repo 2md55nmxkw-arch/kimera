@@ -19,37 +19,50 @@
       <span class="count"><b id="hud-index">01</b><span> / 03</span><i id="hud-name">Default</i></span>
     </header>
 
+    <nav class="tools" data-t-label="hud.tools">
+      <span>
+        <span data-t="hud.found">found</span>
+        <b id="hud-found" hidden>00 / 00</b>
+        <button id="hud-reset" type="button" data-t-label="hud.reset" hidden>×</button>
+      </span>
+      <span data-t-label="hud.lang">
+        <button type="button" data-lang="en">EN</button>
+        <button type="button" data-lang="ru">RU</button>
+      </span>
+      <span><a href="programme.html" data-t="hud.programme">programme</a></span>
+    </nav>
+
     <main class="copy">
       <section>
         <p class="kana" lang="ja" aria-hidden="true">素顔</p>
-        <h1 class="word">Kimera</h1>
-        <p class="lede">One body, three skins.</p>
+        <h1 class="word" data-t="ch1.word">Kimera</h1>
+        <p class="lede" data-t="ch1.lede">One body, three skins.</p>
         <p class="plate">
-          <b>01 — Default</b>
-          The model as it is, lit and nothing more. She began as an April Fools’ hoax in 2008 and
-          is a chimera by design, so the two skins that follow are stitched over this same body.
+          <b data-t="ch1.head">01 — Default</b>
+          <span data-t="ch1.text">The model as it is, lit and nothing more. She began as an April Fools’ hoax in 2008 and
+          is a chimera by design, so the two skins that follow are stitched over this same body.</span>
         </p>
       </section>
 
       <section>
         <p class="kana" lang="ja" aria-hidden="true">硝子</p>
-        <h2 class="word">Mosaic</h2>
+        <h2 class="word" data-t="ch2.word">Mosaic</h2>
         <p class="plate">
-          <b>02 — Mosaic</b>
-          A rose window cut around her head: fine shards for the figure, large ones for the glass
+          <b data-t="ch2.head">02 — Mosaic</b>
+          <span data-t="ch2.text">A rose window cut around her head: fine shards for the figure, large ones for the glass
           behind. Each shard takes one colour from the point under its centre, and the ones tilted
-          toward your cursor catch the light.
+          toward your cursor catch the light.</span>
         </p>
       </section>
 
       <section>
         <p class="kana" lang="ja" aria-hidden="true">素描</p>
-        <h2 class="word">Sketch</h2>
+        <h2 class="word" data-t="ch3.word">Sketch</h2>
         <p class="plate">
-          <b>03 — Sketch</b>
-          Pencil on paper, redrawn eight times a second. Every line is three light passes of an
+          <b data-t="ch3.head">03 — Sketch</b>
+          <span data-t="ch3.text">Pencil on paper, redrawn eight times a second. Every line is three light passes of an
           unsteady hand, the shadows are only hinted at, and the construction lines were never
-          erased. The loop closes here: under the lens is the first skin again.
+          erased. The loop closes here: under the lens is the first skin again.</span>
         </p>
       </section>
     </main>
@@ -57,9 +70,9 @@
     <div class="rail" aria-hidden="true"><i></i></div>
 
     <footer class="hud hud-bottom">
-      <span class="hint">move: peek · hold: tear · scroll: shed</span>
-      <span class="tech" id="hud-tech">starting</span>
-      <span class="credit">Kasane Teto © TWINDRILL · fan work</span>
+      <span class="hint" data-t="hud.hint">move: peek · hold: tear · scroll: shed · marks: read</span>
+      <span class="tech" id="hud-tech" data-t="hud.starting">starting</span>
+      <span class="credit" data-t="hud.credit">重音テト © 線/小山乃舞世/TWINDRILL · fan work</span>
     </footer>
 
     <p class="fallback">This piece needs WebGPU or WebGL 2, and neither is available in this browser.</p>

@@ -4,7 +4,7 @@
 import { merge, type Geo } from '../../model/geo';
 import { ball, box, lathe, tube } from '../../model/solids';
 import type { V3 } from '../../model/vec';
-import { part, type StageSet } from '../kit';
+import { mark, part, type StageSet } from '../kit';
 import { frame, planks, sheet, shelf, wallSlab } from './shared';
 
 const PLASTER = '#b3c0ad';
@@ -79,6 +79,10 @@ export const dressingRoom: StageSet = {
     );
     // Блики длиннее стекла — лишнее прячет рама.
     left.add(part(frame(mx, my, 0.84, 0.5, 0.06, BRASS, 0.05).move(0, 0, 0.002), { noShadow: true }));
+    // Записка в углу зеркала — на ней коронная фраза.
+    left.add(part(sheet(mx + 0.27, my - 0.13, 0.13, 0.1, '#f3e7a6', -0.12, 0.02), { noShadow: true }));
+    mark(left, 'mirror', mx - 0.12, my + 0.03, 0.03);
+    mark(left, 'note', mx + 0.27, my - 0.13, 0.03);
     const around: [number, number][] = [];
     for (let i = 0; i < 6; i++) around.push([mx - 0.35 + i * 0.14, my + 0.32]);
     for (let i = 0; i < 3; i++) {
@@ -113,6 +117,7 @@ export const dressingRoom: StageSet = {
       baguette([sx + 0.03, 1.22, 0.12], [sx + 0.15, 1.58, 0.1], 0.015),
     );
     right.add(part(loaves));
+    mark(right, 'bread', sx, 1.48, 0.14);
 
     // Низкий ящик-кофр у стены: виден только на общем плане.
     left.add(part(box(0.7, 0.42, 0.4, { bevel: 0.02 }).move(0.9, 0, 0.24).tint('#2e2a33')));
