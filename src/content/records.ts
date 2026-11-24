@@ -110,7 +110,7 @@ function mesmerizer(): MotionClip[] {
 export const RECORDS: RecordItem[] = [
   {
     ...record(1, '19y8YTbvri8', 'メズマライザー', 'Mesmerizer', 'サツキ', true, ['#e0418f', '#35c7c0'], 'hypno', 92.5, 'hypno'),
-    motion: { url: '/motions/mesmerizer.kmt', clips: mesmerizer() },
+    motion: { url: `${import.meta.env.BASE_URL}motions/mesmerizer.kmt`, clips: mesmerizer() },
     show: { kind: 'hypno', colors: ['#e0418f', '#35c7c0'], bpm: 185, drop: 1.43 },
   },
   record(2, 'LLjfal8jCYI', 'オーバーライド', 'Override', '吉田夜世', false, ['#f08a24', '#201c22'], 'glitch', 102, 'glitch'),

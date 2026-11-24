@@ -41,6 +41,9 @@ function shots(): Plugin {
 }
 
 export default defineConfig({
+  // Сайт может лежать не в корне домена (GitHub Pages: /<репозиторий>/). Адрес папки
+  // приходит из окружения сборки; все пути к файлам сайта отсчитываются от него.
+  base: process.env.BASE_PATH ?? '/',
   // 'mpa': отсутствующие файлы отдают 404, а не index.html.
   // Так проверка «лежит ли модель в public/models» не получает HTML вместо VRM.
   appType: 'mpa',
