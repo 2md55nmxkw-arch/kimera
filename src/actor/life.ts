@@ -37,6 +37,8 @@ export interface ArmOver {
   aimUp: number;
   /** 0…1: рука двигается резче обычного. */
   quick: number;
+  /** 0…1: поза записана относительно груди — корпус качнулся, кисть едет с ним (танцы). */
+  ride: number;
 }
 
 export interface Life {
@@ -93,7 +95,7 @@ export interface LifeInput {
   hands: [THREE.Vector3, THREE.Vector3];
 }
 
-const zeroOver = (): ArmOver => ({ w: 0, pose: blankArm(), aim: 0, aimReach: 0.8, aimSide: 0, aimUp: 0, quick: 0 });
+const zeroOver = (): ArmOver => ({ w: 0, pose: blankArm(), aim: 0, aimReach: 0.8, aimSide: 0, aimUp: 0, quick: 0, ride: 0 });
 const zero = (): Life => ({
   eyeYaw: 0,
   eyePitch: 0,
@@ -131,7 +133,7 @@ function clear(l: Life): void {
   l.eyeYaw = l.eyePitch = l.gaze = l.gazeHead = l.blink = 0;
   l.attend = 1;
   l.knock = false;
-  for (const a of l.arm) a.w = a.aim = a.quick = a.aimSide = a.aimUp = 0;
+  for (const a of l.arm) a.w = a.aim = a.quick = a.aimSide = a.aimUp = a.ride = 0;
 }
 
 // ── позы рук для жестов ───────────────────────────────────────────────────

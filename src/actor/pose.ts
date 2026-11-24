@@ -235,6 +235,7 @@ interface ArmRig {
   hand: THREE.Object3D | null;
   l1: number;
   l2: number;
+  rest: THREE.Vector3; // где плечо в исходной стойке, мир
   target: THREE.Vector3; // сглаженная цель запястья, мир
   prev: THREE.Vector3; // она же кадр назад — для скорости
   vel: THREE.Vector3;
@@ -243,6 +244,17 @@ interface ArmRig {
   curl: Spring[];
   spread: Spring;
   wrist: Spring[];
+}
+
+interface LegRig {
+  side: 1 | -1;
+  upper: THREE.Object3D;
+  lower: THREE.Object3D;
+  foot: THREE.Object3D;
+  l1: number;
+  l2: number;
+  down: THREE.Vector3; // куда смотрит бедро в исходной стойке, мир
+  ankle: THREE.Vector3; // где стоит ступня, мир
 }
 
 export function createPoser(vrm: VRM): Poser | null {
@@ -288,6 +300,7 @@ export function createPoser(vrm: VRM): Poser | null {
       hand,
       l1: a.distanceTo(b),
       l2: b.distanceTo(c),
+      rest: a.clone(),
       target: new THREE.Vector3(),
       prev: new THREE.Vector3(),
       vel: new THREE.Vector3(),
@@ -306,6 +319,21 @@ export function createPoser(vrm: VRM): Poser | null {
     };
   };
   const arms = [makeArm(1), makeArm(-1)].filter((a): a is ArmRig => a !== null);
+
+  // Ноги: ступни стоят там, где стояли, а колени сгибаются сами, когда таз идёт вниз
+  // или вбок. Без этого любое движение таза возило ступни по полу.
+  const makeLeg = (side: 1 | -1): LegRig | null => {
+    const p = side === 1 ? 'left' : 'right';
+    const upper = bone(`${p}UpperLeg` as BoneName);
+    const lower = bone(`${p}LowerLeg` as BoneName);
+    const foot = bone(`${p}Foot` as BoneName);
+    if (!upper || !lower || !foot) return null;
+    const a = upper.getWorldPosition(new THREE.Vector3());
+    const b = lower.getWorldPosition(new THREE.Vector3());
+    const c = foot.getWorldPosition(new THREE.Vector3());
+    return { side, upper, lower, foot, l1: a.distanceTo(b), l2: b.distanceTo(c), down: b.clone().sub(a).normalize(), ankle: c };
+  };
+  const legs = [makeLeg(1), makeLeg(-1)].filter((l): l is LegRig => l !== null);
 
   const cur: Pose = {
     name: '',
@@ -336,6 +364,33 @@ export function createPoser(vrm: VRM): Poser | null {
   const qL = new THREE.Quaternion();
   const qTmp = new THREE.Quaternion();
   const stride = new THREE.Vector3(); // на сколько тело сейчас шагнуло к зрителю, мир
+  const qRide = new THREE.Quaternion(); // на сколько грудь повёрнута относительно покоя, мир
+  const ribs = upperChest ?? chest ?? spine;
+
+  function solveLeg(leg: LegRig) {
+    const { side, upper, lower, foot } = leg;
+    upper.getWorldPosition(S);
+    T.copy(leg.ankle).add(stride);
+    dir.copy(T).sub(S);
+    const len = clamp(dir.length(), Math.abs(leg.l1 - leg.l2) + 0.02, (leg.l1 + leg.l2) * 0.9995);
+    dir.normalize();
+    const cosA = clamp((leg.l1 * leg.l1 + len * len - leg.l2 * leg.l2) / (2 * leg.l1 * len), -1, 1);
+    const sinA = Math.sqrt(1 - cosA * cosA);
+    // Колено смотрит на зрителя и чуть наружу.
+    pole.set(0.14 * side, 0, 1);
+    pole.addScaledVector(dir, -pole.dot(dir)).normalize();
+    E.copy(S).addScaledVector(dir, leg.l1 * cosA).addScaledVector(pole, leg.l1 * sinA);
+    uDir.copy(E).sub(S).normalize();
+    lDir.copy(S).addScaledVector(dir, len).sub(E).normalize();
+
+    hips!.getWorldQuaternion(qParent);
+    qU.setFromUnitVectors(leg.down, uDir).multiply(q0);
+    qL.setFromUnitVectors(uDir, lDir).multiply(qU);
+    upper.quaternion.copy(qParent).invert().multiply(qU);
+    lower.quaternion.copy(qU).invert().multiply(qL);
+    // Ступня остаётся повёрнутой так, как стояла.
+    foot.quaternion.copy(qL).invert().multiply(q0);
+  }
 
   function solveArm(
     rig: ArmRig,
@@ -354,7 +409,15 @@ export function createPoser(vrm: VRM): Poser | null {
 
     // Цель запястья: из позы, плюс лёгкий дрейф, плюс вздрагивание при нажатии.
     // Позы записаны для тела, стоящего на месте; шагнула вперёд — цель едет с ней.
-    T.set(p.hand[0] * side, p.hand[1], p.hand[2]).add(stride);
+    T.set(p.hand[0] * side, p.hand[1], p.hand[2]);
+    const ride = over?.ride ?? 0;
+    if (ride > 0.001) {
+      // Поза танца записана относительно груди: откуда плечо ушло и как грудь
+      // повернулась, туда же уходит и точка для кисти.
+      reach.copy(T).sub(rig.rest).applyQuaternion(qRide).add(S).sub(stride);
+      T.lerp(reach, ride);
+    }
+    T.add(stride);
     T.x += Math.sin(t * 0.7 + seed) * 0.006;
     T.y += Math.sin(t * 0.9 + seed * 2) * 0.006 + press * 0.035 + Math.sin(t * 2.2) * 0.006 * p.wave;
     T.z += press * 0.02;
@@ -410,6 +473,7 @@ export function createPoser(vrm: VRM): Poser | null {
     const cosA = clamp((rig.l1 * rig.l1 + len * len - rig.l2 * rig.l2) / (2 * rig.l1 * len), -1, 1);
     const sinA = Math.sqrt(1 - cosA * cosA);
     pole.set(p.elbow[0] * side, p.elbow[1], p.elbow[2]);
+    if (ride > 0.001) pole.applyQuaternion(qTmp.identity().slerp(qRide, ride));
     pole.addScaledVector(dir, -pole.dot(dir));
     if (pole.lengthSq() < 1e-6) pole.set(0, -1, 0).addScaledVector(dir, dir.y);
     pole.normalize();
@@ -565,8 +629,10 @@ export function createPoser(vrm: VRM): Poser | null {
       const shrug = cur.shrug + press * 0.14 + react.shrug + breath * 0.012 + (life?.shrug ?? 0);
       for (const rig of arms) setEuler(rig.shoulder, 0, 0, shrug, rig.side);
 
-      // Дальше нужны мировые положения плеч уже с учётом корпуса.
+      // Дальше нужны мировые положения плеч и бёдер уже с учётом корпуса.
       hips.updateMatrixWorld(true);
+      ribs.getWorldQuaternion(qRide).multiply(q0inv);
+      for (const leg of legs) solveLeg(leg);
       for (const rig of arms) {
         const left = rig.side === 1;
         const i = left ? 0 : 1;

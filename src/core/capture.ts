@@ -56,6 +56,11 @@ export interface Shot {
   frames?: number;
   /** Вызывается перед каждым шагом: двигать указатель, запускать реакции. */
   each?(rig: Rig, frame: number, frames: number): void;
+  /**
+   * Кадры с группой в обычный набор не входят: их снимают, назвав набор именем
+   * группы или её началом до дефиса (`shots.mjs strip`, `shots.mjs strip-hypno`).
+   */
+  group?: string;
 }
 
 const CORNER: [number, number] = [0.1, 0.86]; // линза в углу, персонаж открыт
@@ -139,8 +144,11 @@ function restore(rig: Rig): void {
 /** Снять все кадры (или только названные) в набор `set`. */
 export async function runShots(rig: Rig, set: string, only?: string[]): Promise<string[]> {
   const taken: string[] = [];
+  const inSet = (g: string | undefined) => g === set || Boolean(g?.startsWith(`${set}-`));
+  const grouped = SHOTS.some((s) => inSet(s.group));
   for (const shot of SHOTS) {
     if (only && !only.includes(shot.name)) continue;
+    if (grouped ? !inSet(shot.group) : shot.group) continue;
     const [w, h] = shot.size ?? [1280, 720];
     rig.resizeTo(w, h, 1);
     pose(rig, shot);

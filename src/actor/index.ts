@@ -156,12 +156,17 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
   const life = createLife();
   let wantListen = false;
   let listening = 0; // 0…1, плавно
-  // Танец: какой, в каком темпе, сколько секунд песни прошло и насколько он взял верх.
+  // Танец. Просят один (danceName), а идёт, возможно, ещё другой (danceShown): танцы
+  // не переключаются на ходу — прежний сначала стихает, и только тогда встаёт новый.
+  // Так же с перемоткой песни: стихла, перескочила, вернулась. Иначе поза прыгает.
   let danceName: DanceName | null = null;
-  let danceShown: DanceName = 'sway';
   let danceTempo = 96;
-  let danceClock = 0;
-  let dancing = 0;
+  let danceShown: DanceName = 'sway';
+  let tempoShown = 96;
+  let danceClock = 0; // сколько секунд песни прошло
+  let danceLag = 0; // на сколько секунд наши часы отстали от песни
+  let danceJump: number | null = null; // перемотка: куда перескочить, когда танец стихнет
+  let danceRamp = 0; // 0…1, ход входа в танец
   const memory = createMemory();
   // Гладили в прошлый раз — машет, доводили — косится. Сброс (reset) приветствие отменяет.
   life.greet(memory.standing === 'kind' ? 'wave' : memory.standing === 'wary' ? 'wary' : null);
@@ -297,21 +302,28 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
       wantListen = on;
     },
     dance(name, tempo = 96) {
-      if (name && name !== danceName && dancing < 0.05) danceClock = 0;
       danceName = name;
       danceTempo = tempo;
+      if (name === danceShown) tempoShown = tempo;
     },
     danceAt(seconds) {
-      // Плеер сообщает время песни несколько раз в секунду; мелкие расхождения не трогаем,
-      // чтобы танец не дёргался, крупные (перемотка) — принимаем сразу.
-      if (Math.abs(seconds - danceClock) > 0.15) danceClock = seconds;
+      // Плеер сообщает время песни несколько раз в секунду. Мелкое расхождение
+      // выбираем понемногу, чуть ускоряя или замедляя свои часы; крупное — перемотка.
+      const off = seconds - danceClock;
+      if (Math.abs(off) > 1) danceJump = seconds;
+      else {
+        danceJump = null;
+        danceLag = off;
+      }
     },
     reset() {
       wantListen = false;
       listening = 0;
       danceName = null;
       danceClock = 0;
-      dancing = 0;
+      danceLag = 0;
+      danceJump = null;
+      danceRamp = 0;
       yaw.v = 0;
       pitch.v = 0;
       seen.ready = false;
@@ -346,14 +358,27 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
         face: zones.face.pos,
         hands,
       });
-      // Играет музыка: слушает — улыбка, голова покачивается, лёгкий подскок в такт.
-      // Настоящего такта страница не знает (плеер чужой), поэтому темп спокойный и общий.
-      if (danceName) {
-        danceShown = danceName;
-        danceClock += dt;
+      // Танец. Сменить его или перескочить по песне можно, только когда он стих.
+      const other = danceName !== null && danceName !== danceShown;
+      if (danceRamp <= 0 && (other || danceJump !== null)) {
+        if (other) {
+          danceShown = danceName!;
+          tempoShown = danceTempo;
+          danceClock = 0;
+        }
+        if (danceJump !== null) danceClock = danceJump;
+        danceJump = null;
+        danceLag = 0;
       }
-      dancing += ((danceName && !still ? 1 : 0) - dancing) * (1 - Math.exp(-dt * 4));
-      if (dancing > 0.002) applyDance(danceShown, (danceClock * danceTempo) / 60, dancing, live);
+      if (danceName) {
+        const fix = Math.min(0.15, Math.max(-0.15, danceLag * 2)) * dt;
+        danceClock += dt + fix;
+        danceLag -= fix;
+      }
+      const wantDance = danceName !== null && !other && danceJump === null && !still;
+      danceRamp = clamp01(danceRamp + (wantDance ? dt : -dt) / 0.5);
+      const dancing = danceRamp * danceRamp * (3 - 2 * danceRamp);
+      if (dancing > 0.002) applyDance(danceShown, (danceClock * tempoShown) / 60, dancing, live);
       listening += ((wantListen && !still ? 1 : 0) - listening) * (1 - Math.exp(-dt * 2.5));
       // Слушает, когда музыка открыта, но не танцует (пауза, загрузка).
       if (listening * (1 - dancing) > 0.002) {
