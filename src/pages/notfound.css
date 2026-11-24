@@ -85,26 +85,30 @@
   user-select: none;
 }
 
-/* Полоса от ластика: бумага светлее, рисунок под ней едва угадывается. */
+/* Всё на листе стоит в долях размера цифр, от верха их строки. Сами знаки занимают
+   в ней от 0.10 до 0.86 (измерено у Dela Gothic One), середина — около 0.48:
+   проценты от блока тут не годятся — блок выше знаков, и полоса уезжала вверх. */
+
+/* Полоса от ластика: бумага светлее, рисунок под ней едва угадывается.
+   Идёт через середину цифр с лёгким подъёмом вправо. */
 .rub {
   position: absolute;
-  left: -6%;
-  top: 34%;
-  width: 78%;
-  height: 34%;
-  rotate: -7deg;
+  left: calc(var(--size) * -0.12);
+  top: calc(var(--size) * 0.35);
+  width: calc(var(--size) * 2.15);
+  height: calc(var(--size) * 0.3);
+  rotate: -4deg;
   border-radius: 45% 60% 50% 40% / 60% 45% 55% 50%;
   background: radial-gradient(closest-side, #f8f4ea 62%, rgb(248 244 234 / 0.85) 80%, transparent);
   filter: blur(calc(var(--size) * 0.012));
   opacity: 0.94;
-  transform-origin: 0 50%;
 }
 
-/* Сам ластик: розовый брусок в бумажной манжете, лежит там, где остановился. */
+/* Сам ластик: розовый брусок в бумажной манжете, лежит у правого конца полосы. */
 .rubber {
   position: absolute;
-  left: 66%;
-  top: 30%;
+  left: calc(var(--size) * 1.93);
+  top: calc(var(--size) * 0.335);
   width: calc(var(--size) * 0.3);
   height: calc(var(--size) * 0.13);
   rotate: -24deg;
@@ -118,6 +122,8 @@
 /* Крошки: точки расставляет pages/notfound.ts, здесь только их вид. */
 .crumbs i {
   position: absolute;
+  left: calc(var(--size) * var(--x));
+  top: calc(var(--size) * var(--y));
   width: calc(var(--size) * var(--s));
   height: calc(var(--size) * var(--s) * var(--k));
   rotate: var(--r);
@@ -139,22 +145,19 @@
     animation-delay: calc(0.35s + var(--d) * 0.9s);
   }
 }
+/* Полоса открывается слева направо вслед за ластиком. */
 @keyframes rub-across {
   from {
-    scale: 0 1;
-    opacity: 0;
-  }
-  20% {
-    opacity: 0.94;
+    clip-path: inset(-20% 100% -20% 0);
   }
   to {
-    scale: 1 1;
+    clip-path: inset(-20% -5% -20% 0);
   }
 }
 @keyframes rubber-across {
   from {
-    left: -8%;
-    top: 46%;
+    left: calc(var(--size) * -0.27);
+    top: calc(var(--size) * 0.51);
     rotate: -12deg;
   }
   50% {

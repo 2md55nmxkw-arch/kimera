@@ -71,9 +71,10 @@ if (crumbs) {
   for (let i = 0; i < 22; i++) {
     const along = rnd(i, 1);
     const crumb = document.createElement('i');
-    // Полоса идёт слева направо с подъёмом; крошки ложатся под ней и у её конца.
-    crumb.style.left = `${-4 + along * 82 + (rnd(i, 2) - 0.5) * 6}%`;
-    crumb.style.top = `${72 - along * 12 + rnd(i, 3) * 20}%`;
+    // Полоса идёт через середину цифр с подъёмом вправо; крошки ложатся под её
+    // нижним краем. Координаты — в долях размера цифр, как у самой полосы.
+    crumb.style.setProperty('--x', (-0.08 + along * 2.1 + (rnd(i, 2) - 0.5) * 0.12).toFixed(3));
+    crumb.style.setProperty('--y', (0.67 - along * 0.15 + rnd(i, 3) * 0.14).toFixed(3));
     crumb.style.setProperty('--s', (0.012 + rnd(i, 4) * 0.02).toFixed(4));
     crumb.style.setProperty('--k', (0.45 + rnd(i, 5) * 0.5).toFixed(2));
     crumb.style.setProperty('--r', `${Math.round(rnd(i, 6) * 180)}deg`);
