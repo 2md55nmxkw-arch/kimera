@@ -262,7 +262,8 @@ async function boot() {
     // Зажатая линза раздвигается; в главе наброска она ластик и, наоборот, сжимается —
     // маленькой резинкой стирают точнее.
     const squeeze = chapter === COUNT - 1 && q > 0.14 ? -0.42 : 0.9;
-    const lensRest = 0.2 * clamp(aspect * 0.9, 0.55, 1) * (1 + pointer.press * squeeze);
+    // Пока идёт шоу под музыку, линзы на курсоре нет: она отвлекает от танца.
+    const lensRest = 0.2 * clamp(aspect * 0.9, 0.55, 1) * (1 + pointer.press * squeeze) * (1 - show.cover);
     const lens = lensRadius(q, lensRest, Math.hypot(aspect, 1) + 0.15);
     u.lens.value = lens;
     u.clock.value = t;
@@ -276,7 +277,7 @@ async function boot() {
     for (const part of parts) part.step?.(frame);
     // В главе наброска зажатая линза — ластик: соседнюю шкуру и чернильный след не показывает.
     u.erase.value = eraser.erase;
-    u.trailGain.value *= 1 - eraser.hold;
+    u.trailGain.value *= (1 - eraser.hold) * (1 - show.cover);
 
     placeCamera(camera, frame, actor.headY, debugView);
     // Шоу может чуть наехать камерой (значение с прошлого кадра: на глаз не отличить).

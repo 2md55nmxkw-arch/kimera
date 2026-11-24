@@ -10,6 +10,7 @@
 import type { DanceName } from '../actor/dance';
 import type { MotionClip, MotionInfo } from '../actor/motion';
 import type { ShowInfo } from '../fx/show';
+import type { ShowKind } from '../fx/show-patterns';
 import type { Fact } from './facts';
 
 export interface RecordItem {
@@ -29,8 +30,8 @@ export interface RecordItem {
    * месте может и не быть — он не коммитится, — тогда идёт свой танец.
    */
   motion?: MotionInfo;
-  /** Шоу на сцене, пока играет пластинка (fx/show.ts). Есть не у всех. */
-  show?: ShowInfo;
+  /** Шоу на сцене, пока играет пластинка (fx/show.ts). */
+  show: ShowInfo;
   /** То, что показывает этикетка. */
   fact: Fact;
 }
@@ -45,11 +46,15 @@ const record = (
   sleeve: [string, string],
   dance: DanceName,
   tempo: number,
+  show: ShowKind,
 ): RecordItem => ({
   video,
   sleeve,
   dance,
   tempo,
+  // Шоу в цветах конверта. Темп песни вдвое выше темпа танца; с какой секунды вступает
+  // бит, знаем только у Mesmerizer (там это вписано отдельно), у остальных — с нуля.
+  show: { kind: show, colors: sleeve, bpm: tempo * 2, drop: 0 },
   fact: {
     id: `music.${n}`,
     group: 'music',
@@ -104,16 +109,16 @@ function mesmerizer(): MotionClip[] {
 
 export const RECORDS: RecordItem[] = [
   {
-    ...record(1, '19y8YTbvri8', 'メズマライザー', 'Mesmerizer', 'サツキ', true, ['#e0418f', '#35c7c0'], 'hypno', 92.5),
+    ...record(1, '19y8YTbvri8', 'メズマライザー', 'Mesmerizer', 'サツキ', true, ['#e0418f', '#35c7c0'], 'hypno', 92.5, 'hypno'),
     motion: { url: '/motions/mesmerizer.kmt', clips: mesmerizer() },
     show: { kind: 'hypno', colors: ['#e0418f', '#35c7c0'], bpm: 185, drop: 1.43 },
   },
-  record(2, 'LLjfal8jCYI', 'オーバーライド', 'Override', '吉田夜世', false, ['#f08a24', '#201c22'], 'glitch', 102),
-  record(3, 'Soy4jGPHr3g', 'テトリス', 'Tetoris', '柊マグネタイト', false, ['#d8322e', '#f3e9d2'], 'blocks', 85),
-  record(4, 'UHbmkxv-874', 'ライアーダンサー', 'Liar Dancer', 'マサラダ', false, ['#6a3fb0', '#f2c230'], 'liar', 85),
-  record(5, 'F38EuG2dAyM', 'イガク', 'Igaku', '原口沙輔', false, ['#eef0ee', '#2f8f6b'], 'clinic', 85),
-  record(6, 'HTxwOxFt5d4', '人マニア', 'Hito Mania', '原口沙輔', false, ['#1f3fa8', '#f4d23c'], 'peek', 75),
-  record(7, 'sqK-jh4TDXo', 'Machine Love', 'Machine Love', 'Jamie Paige', false, ['#c9ced6', '#e0418f'], 'robot', 87.5),
+  record(2, 'LLjfal8jCYI', 'オーバーライド', 'Override', '吉田夜世', false, ['#f08a24', '#201c22'], 'glitch', 102, 'glitch'),
+  record(3, 'Soy4jGPHr3g', 'テトリス', 'Tetoris', '柊マグネタイト', false, ['#d8322e', '#f3e9d2'], 'blocks', 85, 'blocks'),
+  record(4, 'UHbmkxv-874', 'ライアーダンサー', 'Liar Dancer', 'マサラダ', false, ['#6a3fb0', '#f2c230'], 'liar', 85, 'liar'),
+  record(5, 'F38EuG2dAyM', 'イガク', 'Igaku', '原口沙輔', false, ['#eef0ee', '#2f8f6b'], 'clinic', 85, 'clinic'),
+  record(6, 'HTxwOxFt5d4', '人マニア', 'Hito Mania', '原口沙輔', false, ['#1f3fa8', '#f4d23c'], 'peek', 75, 'crowd'),
+  record(7, 'sqK-jh4TDXo', 'Machine Love', 'Machine Love', 'Jamie Paige', false, ['#c9ced6', '#e0418f'], 'robot', 87.5, 'machine'),
   // Запись с концерта «テトライブ2025», выложена издателем на канале «Kasane Teto - Topic».
-  record(8, '7ZAbvc-uT9s', 'おちゃめ機能', 'Ochame Kinou', 'ゴジマジP', false, ['#f3b6c8', '#7a2d4a'], 'sway', 75),
+  record(8, '7ZAbvc-uT9s', 'おちゃめ機能', 'Ochame Kinou', 'ゴジマジP', false, ['#f3b6c8', '#7a2d4a'], 'sway', 75, 'cute'),
 ];

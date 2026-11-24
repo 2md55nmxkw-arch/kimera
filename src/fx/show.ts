@@ -6,37 +6,32 @@
 // что нельзя присвоить, — у песни про гипноз крутится спираль.
 //
 // Устройство театральное. С колосников опускается задник — полотно за спиной Тето,
-// перед декорацией. На нём узор, который целиком считается из секунды песни: доля,
-// такт, восьмитактовый блок. Поэтому шоу не нужно ничего помнить, оно попадает в
-// музыку после паузы и перемотки и одинаково на контрольных кадрах.
+// перед декорацией. На нём узор песни (fx/show-patterns.ts), который целиком считается
+// из секунды песни. К узору — конфетти, контровой свет в его цвет и лёгкий наезд
+// камеры; чего и сколько, каждый кадр говорит сам узор.
 //
-// Шоу «гипноз» (Mesmerizer) чередует два состояния по восемь тактов, как и танец:
-//   · танец — лучи вокруг головы, кольца от центра на каждую долю, конфетти,
-//     цвета меняются раз в два такта;
-//   · транс — чёрно-белая спираль, свет гаснет, камера медленно наезжает.
-// Новое состояние раскрывается кругом из центра.
-//
-// Про мигание. Доля песни — три раза в секунду, на этой частоте большие площади
+// Про мигание. Доля песни — около трёх раз в секунду, на этой частоте большие площади
 // мигать не должны (от этого бывает плохо). Поэтому на долю двигаются только тонкие
 // линии и близкие по светлоте цвета, а всё контрастное меняется раз в такт и реже.
 // При «уменьшении движения» шоу не включается вовсе.
 import * as THREE from 'three/webgpu';
-import { abs, atan, exp, float, fract, fwidth, length, log, min, mix, positionLocal, smoothstep, uniform, vec3 } from 'three/tsl';
+import { float, fwidth, length, positionLocal, smoothstep, uniform, vec3 } from 'three/tsl';
 
 import { allocateId, tag } from '../core/gbuffer';
+import { PATTERNS, type Ask, type Beat, type Canvas, type Pattern, type ShowKind } from './show-patterns';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type N = any;
 
 /** Что пластинка знает о своём шоу. */
 export interface ShowInfo {
-  /** Какое шоу. Пока одно. */
-  kind: 'hypno';
+  /** Какой узор (fx/show-patterns.ts). */
+  kind: ShowKind;
   /** Два цвета пластинки — они же цвета шоу. */
   colors: [string, string];
   /** Темп песни, ударов в минуту. */
   bpm: number;
-  /** Секунда песни, с которой считаются такты (вступает бит). */
+  /** Секунда песни, с которой считаются такты (вступает бит). Не знаем — 0. */
   drop: number;
 }
 
@@ -55,13 +50,15 @@ export interface Show {
   step(dt: number, song: number, live: number, still: boolean, eye: THREE.Vector3): void;
   /** На сколько камере наехать в этом кадре, доли. */
   zoom: number;
+  /** 0…1: насколько задник опущен. Пока он опущен, линза на курсоре не нужна. */
+  cover: number;
   reset(): void;
 }
 
 const INK = '#0b0b0c';
 const PAPER = '#f4efe4';
 const TAU = Math.PI * 2;
-/** Задник: размер, где висит, и где на нём середина узора (за головой Тето). */
+/** Задник: размер и где висит. */
 const WIDE = 5.4;
 const TALL = 3.5;
 const DEPTH = -0.75;
@@ -75,7 +72,6 @@ const smooth = (x: number) => {
   const u = clamp01(x);
   return u * u * (3 - 2 * u);
 };
-const easeOut = (x: number) => 1 - (1 - clamp01(x)) ** 3;
 /** Доезжает с небольшим проскоком: полотно садится на место и чуть отыгрывает. */
 const settle = (x: number) => {
   const u = clamp01(x) - 1;
@@ -91,84 +87,77 @@ const hash = (i: number, salt: number) => {
 export function createShow(rim: THREE.DirectionalLight): Show {
   const root = new THREE.Group();
   let info: ShowInfo | null = null;
+  let next: ShowInfo | null = null; // другая пластинка ждёт, пока узор погаснет
   let leaving = false; // пластинку сняли: полотно уходит, узор на нём пока прежний
   let down = 0; // 0…1: насколько задник опущен
+  let shown = 1; // 0…1: узор виден (гаснет на смену пластинки)
+  let flurry = 0; // 0…1: насколько конфетти сыплется
+  let pattern: Pattern | null = null;
 
   const u = {
-    spin: uniform(0), // поворот спирали, обороты
-    turn: uniform(0), // поворот лучей, доли пары лучей
-    ring: uniform(0), // ход колец: раз в долю рождается новое
     centre: uniform(new THREE.Vector2()), // середина узора на полотне, метры от его середины
     kick: uniform(0), // удар доли: 1 на долю и быстро спадает
-    iris: uniform(9), // радиус круга, которым раскрывается новое состояние, метры
-    inner: uniform(0), // что внутри круга: 0 — транс, 1 — танец
     gain: uniform(1), // общая яркость
-    c1: uniform(new THREE.Color(INK)), // лучи: два близких тона
-    c2: uniform(new THREE.Color(INK)),
-    c3: uniform(new THREE.Color(PAPER)), // кольца и круг за головой
-    glow: uniform(new THREE.Color(PAPER)), // отсвет в середине спирали
+    a: uniform(new THREE.Color(INK)), // цвета пластинки
+    b: uniform(new THREE.Color(PAPER)),
   };
-  const ink: N = vec3(...new THREE.Color(INK).toArray());
-  const paper: N = vec3(...new THREE.Color(PAPER).toArray());
+  const p: N = positionLocal.xy.sub(u.centre);
+  const far: N = length(p);
+  const canvas: Canvas = {
+    p,
+    far,
+    px: fwidth(positionLocal.x).add(1e-5),
+    kick: u.kick,
+    a: u.a,
+    b: u.b,
+    ink: vec3(...new THREE.Color(INK).toArray()),
+    paper: vec3(...new THREE.Color(PAPER).toArray()),
+  };
 
   // ── задник ────────────────────────────────────────────────────────────
-  const cloth = new THREE.MeshBasicNodeMaterial();
-  {
-    const p: N = positionLocal.xy.sub(u.centre);
-    const px: N = fwidth(positionLocal.x).add(1e-5); // метров в одной точке экрана
-    const far: N = length(p);
-    const r: N = far.mul(float(1).sub(u.kick.mul(0.03))); // на долю узор чуть раздаётся
-    const around: N = atan(p.y, p.x).div(TAU);
-    const soft = (value: N, width: N): N => smoothstep(float(0.5).sub(width), float(0.5).add(width), abs(fract(value).mul(2).sub(1)));
-
-    // Транс: спираль в два рукава, к середине — отсвет цвета пластинки.
-    const coil: N = soft(around.mul(2).add(log(r.add(0.04)).mul(0.85)).sub(u.spin), min(px.mul(1.9).div(r.add(0.02)), 0.5));
-    const trance: N = mix(mix(ink, paper, coil), u.glow, exp(r.mul(-2.6)).mul(0.6));
-
-    // Танец: лучи двух близких тонов, поверх — кольца и круг за головой.
-    const rays: N = soft(around.mul(7).add(u.turn), min(px.mul(2.3).div(r.add(0.02)), 0.5));
-    let dance: N = mix(u.c1, u.c2, rays);
-    const reach = 2.6;
-    for (let k = 0; k < 2; k++) {
-      const at: N = fract(u.ring.add(k / 2)).mul(reach);
-      const line: N = smoothstep(px.add(0.022), float(0.022), abs(r.sub(at))).mul(float(1).sub(at.div(reach)));
-      dance = mix(dance, u.c3, line);
-    }
-    dance = mix(dance, u.c3, smoothstep(px.add(0.36), float(0.36), r));
-    dance = mix(dance, ink, smoothstep(px.add(0.012), float(0.012), abs(r.sub(0.3))));
-
-    // Новое состояние раскрывается кругом из середины; по кромке круга — линия.
-    const inside: N = smoothstep(u.iris.add(px), u.iris, far);
-    let color: N = mix(trance, dance, mix(float(1).sub(inside), inside, u.inner));
-    color = mix(color, ink, smoothstep(px.add(0.02), float(0.02), abs(far.sub(u.iris))));
-    // К краям полотно темнее: взгляд держится в середине.
-    cloth.colorNode = color.mul(u.gain).mul(float(1).sub(smoothstep(1.1, 3, far).mul(0.4)));
-  }
-  const drop = new THREE.Mesh(new THREE.PlaneGeometry(WIDE, TALL), cloth);
+  // У каждого узора свой материал; собирается, когда узор понадобился впервые.
+  const built = new Map<ShowKind, { material: THREE.Material; pattern: Pattern }>();
+  const drop = new THREE.Mesh(new THREE.PlaneGeometry(WIDE, TALL));
   drop.position.set(0, MIDDLE, DEPTH);
   tag(drop, allocateId());
   root.add(drop);
 
   // ── конфетти ──────────────────────────────────────────────────────────
-  const bits = new THREE.InstancedMesh(
-    new THREE.PlaneGeometry(0.05, 0.028),
-    new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide }),
-    PIECES,
-  );
+  const bits = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.05, 0.028), new THREE.MeshBasicNodeMaterial({ side: THREE.DoubleSide }), PIECES);
   bits.frustumCulled = false;
   tag(bits, allocateId());
   root.add(bits);
   const tint = new THREE.Color();
-  const paint = (colors: string[]) => {
-    for (let i = 0; i < PIECES; i++) bits.setColorAt(i, tint.set(colors[i % colors.length]));
-    if (bits.instanceColor) bits.instanceColor.needsUpdate = true;
-  };
-  paint([PAPER]);
-  let flurry = 0; // 0…1: насколько конфетти сыплется
-
-  const want = { c1: new THREE.Color(), c2: new THREE.Color(), c3: new THREE.Color() };
   const A = new THREE.Color();
   const B = new THREE.Color();
+  const paperColor = new THREE.Color(PAPER);
+
+  /** Поставить пластинку: цвета, узор, конфетти. */
+  const use = (to: ShowInfo) => {
+    info = to;
+    A.set(to.colors[0]);
+    B.set(to.colors[1]);
+    (u.a.value as THREE.Color).copy(A);
+    (u.b.value as THREE.Color).copy(B);
+    const colors = [to.colors[0], to.colors[1], PAPER, to.colors[0], INK];
+    for (let i = 0; i < PIECES; i++) bits.setColorAt(i, tint.set(colors[i % colors.length]));
+    if (bits.instanceColor) bits.instanceColor.needsUpdate = true;
+
+    let made = built.get(to.kind);
+    if (!made) {
+      const fresh = PATTERNS[to.kind](canvas);
+      const material = new THREE.MeshBasicNodeMaterial();
+      // К краям полотно темнее: взгляд держится в середине.
+      material.colorNode = fresh.color.mul(u.gain).mul(float(1).sub(smoothstep(1.1, 3, far).mul(0.4)));
+      made = { material, pattern: fresh };
+      built.set(to.kind, made);
+    }
+    drop.material = made.material;
+    pattern = made.pattern;
+  };
+
+  const beat: Beat = { dt: 0, song: 0, lead: 0, beat: 0, whole: 0, part: 0, kick: 0, turns: 0, x: 0, A, B };
+  const ask: Ask = { flurry: 0, zoom: 0, rim: 1, tint: 'b', dim: 0 };
   const mat = new THREE.Matrix4();
   const at = new THREE.Vector3();
   const rot = new THREE.Quaternion();
@@ -178,25 +167,29 @@ export function createShow(rim: THREE.DirectionalLight): Show {
   const show: Show = {
     root,
     zoom: 0,
-    set(next) {
-      if (next) leaving = false;
-      if (next === info) return;
-      if (next) {
-        A.set(next.colors[0]);
-        B.set(next.colors[1]);
-        (u.glow.value as THREE.Color).copy(A);
-        paint([next.colors[0], next.colors[1], PAPER, next.colors[0], INK]);
+    cover: 0,
+    set(to) {
+      if (to) leaving = false;
+      if (!to) {
+        next = null;
+        if (down > 0) leaving = true;
+        else info = null;
+        return;
       }
-      // Пока полотно уходит, узор на нём остаётся прежним.
-      if (next || down <= 0) info = next;
-      else leaving = true;
+      // Полотно ещё не опущено — ставим сразу; опущено — прежний узор сперва погаснет.
+      if (!info || down <= 0) use(to);
+      else next = to === info ? null : to;
     },
     reset() {
       info = null;
+      next = null;
       leaving = false;
+      pattern = null;
       down = 0;
+      shown = 1;
       flurry = 0;
       show.zoom = 0;
+      show.cover = 0;
       root.visible = false;
     },
     step(dt, song, live, still, eye) {
@@ -208,67 +201,49 @@ export function createShow(rim: THREE.DirectionalLight): Show {
       }
       root.visible = down > 0.001;
       show.zoom = 0;
-      if (!root.visible || !info) return;
+      show.cover = smooth(down);
+      if (!root.visible || !info || !pattern) return;
+
+      // Смена пластинки при опущенном полотне: узор гаснет, меняется, загорается.
+      shown = clamp01(shown + (next ? -dt / 0.18 : dt / 0.3));
+      if (next && shown <= 0) {
+        use(next);
+        next = null;
+      }
 
       drop.position.y = MIDDLE + (1 - settle(down)) * FLOWN;
       // Середина узора — там, где луч от камеры через голову Тето упирается в полотно.
       const along = (DEPTH - eye.z) / (0 - eye.z);
       (u.centre.value as THREE.Vector2).set(eye.x * (1 - along), eye.y + (HEAD - eye.y) * along - drop.position.y);
 
-      const beat = ((song - info.drop) * info.bpm) / 60;
-      const on = beat >= 0;
-      const whole = Math.floor(beat);
-      const part = beat - whole; // место внутри доли
-      const block = Math.floor(beat / 32);
-      const into = beat - block * 32; // доль от начала блока
-      const dancing = on && block % 2 === 0;
-      const kick = on ? Math.exp(-part * 5) : 0;
+      beat.dt = dt;
+      beat.song = song;
+      beat.lead = info.drop - song;
+      beat.beat = ((song - info.drop) * info.bpm) / 60;
+      beat.whole = Math.floor(beat.beat);
+      beat.part = beat.beat - beat.whole;
+      beat.kick = beat.lead <= 0 ? Math.exp(-beat.part * 5) : 0;
+      // Танец идёт вдвое реже песни и связками по восемь долей (actor/dance.ts).
+      beat.turns = (song * info.bpm) / 120;
+      beat.x = beat.turns % 8;
+      ask.flurry = 0;
+      ask.zoom = 0;
+      ask.rim = 1;
+      ask.tint = 'b';
+      ask.dim = 0;
+      pattern.tick(beat, ask);
 
-      u.kick.value = kick * live;
-      // Спираль идёт ровно и на каждую долю чуть подталкивается.
-      u.spin.value = song * 0.1 + (on ? (whole + easeOut(part)) * 0.035 : 0);
-      // Лучи на долю проворачиваются на четверть пары и доезжают.
-      u.turn.value = on ? (whole + easeOut(part * 1.6)) * 0.25 : 0;
-      u.ring.value = on ? beat / 2 : 0;
-      // До первого удара — транс во всё полотно; дальше каждое состояние раскрывается кругом.
-      u.inner.value = dancing ? 1 : 0;
-      u.iris.value = on ? easeOut(into / 1.6) * 4.4 : 9;
-
-      // Цвета танца меняются раз в два такта: свой цвет, второй цвет, светлая смена.
-      const scheme = on ? Math.floor(beat / 8) % 3 : 0;
-      if (scheme === 0) {
-        want.c1.copy(A);
-        want.c2.copy(A).multiplyScalar(0.78);
-        want.c3.copy(B);
-      } else if (scheme === 1) {
-        want.c1.copy(B);
-        want.c2.copy(B).multiplyScalar(0.8);
-        want.c3.copy(A);
-      } else {
-        want.c1.set(PAPER);
-        want.c2.set(PAPER).multiplyScalar(0.86);
-        want.c3.copy(A);
-      }
-      const k = 1 - Math.exp(-dt * 9);
-      (u.c1.value as THREE.Color).lerp(want.c1, k);
-      (u.c2.value as THREE.Color).lerp(want.c2, k);
-      (u.c3.value as THREE.Color).lerp(want.c3, k);
-
-      // Перед первым ударом музыка на миг смолкает — гаснет и полотно.
-      const hush = smooth((info.drop - song) / 0.06) * smooth((song - (info.drop - 0.26)) / 0.06);
-      u.gain.value = (0.3 + 0.7 * live) * (1 + 0.05 * kick * live) * (1 - 0.92 * hush);
-
-      // Камера: в танце чуть вздрагивает на долю, в трансе медленно наезжает.
-      const push = dancing ? 0.005 * kick + 0.018 * Math.exp(-into * 0.9) : on ? 0.022 * smooth(into / 30) : 0;
-      show.zoom = push * live * smooth(down);
-
-      // Контровой свет сцены (его только что поставила глава) уходит в цвет узора.
+      u.kick.value = beat.kick * live;
+      u.gain.value = (0.3 + 0.7 * live) * (1 + 0.05 * beat.kick * live) * (1 - ask.dim) * smooth(shown);
       const lit = live * smooth(down);
-      rim.color.lerp(u.c3.value as THREE.Color, lit);
-      rim.intensity += ((dancing ? 2.4 * (0.6 + 0.4 * kick) : 0.6) - rim.intensity) * lit;
+      show.zoom = ask.zoom * lit;
+      // Контровой свет сцены (его только что поставила глава) уходит в цвет узора.
+      const hue = ask.tint as Ask['tint']; // узор мог его сменить
+      rim.color.lerp(hue === 'a' ? A : hue === 'b' ? B : paperColor, lit);
+      rim.intensity += (ask.rim - rim.intensity) * lit;
 
-      // Конфетти: только в танце. Каждый кусочек падает по своей дорожке, всё — от секунды песни.
-      flurry = clamp01(flurry + ((dancing ? 1 : 0) * live > 0.5 ? dt : -dt) / 0.6);
+      // Конфетти: каждый кусочек падает по своей дорожке, всё — от секунды песни.
+      flurry = clamp01(flurry + (ask.flurry * live > 0.5 ? dt : -dt) / 0.6);
       bits.visible = flurry > 0.001;
       if (bits.visible) {
         const tall = 3.1;
@@ -278,8 +253,7 @@ export function createShow(rim: THREE.DirectionalLight): Show {
           const sway = Math.sin(song * (1.3 + hash(i, 3) * 1.6) + hash(i, 4) * TAU);
           at.set((hash(i, 5) - 0.5) * 3.4 + sway * 0.07, 2.75 - fall + drop.position.y - MIDDLE, DEPTH + 0.08 + hash(i, 6) * 1.15);
           euler.set(song * (2 + hash(i, 7) * 4), song * (1 + hash(i, 8) * 3), hash(i, 9) * TAU + sway);
-          const grow = smooth(flurry) * (0.7 + hash(i, 10) * 0.7);
-          mat.compose(at, rot.setFromEuler(euler), size.setScalar(grow));
+          mat.compose(at, rot.setFromEuler(euler), size.setScalar(smooth(flurry) * (0.7 + hash(i, 10) * 0.7)));
           bits.setMatrixAt(i, mat);
         }
         bits.instanceMatrix.needsUpdate = true;

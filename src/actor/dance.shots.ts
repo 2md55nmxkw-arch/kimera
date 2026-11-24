@@ -63,8 +63,9 @@ const filed = (times: number[], group: string, site = false): Shot[] =>
 const every = (from: number, step: number, count = 16) => Array.from({ length: count }, (_, i) => from + i * step);
 
 // Шоу под музыку (fx/show.ts): пластинка ставится без плеера, время песни идёт само.
-//   node scripts/shots.mjs show   — восемь моментов Mesmerizer так, как это видно на сайте
-const staged = (times: number[], group: string | undefined, name: (i: number) => string, wide = false): Shot[] =>
+//   node scripts/shots.mjs show    — Mesmerizer: двенадцать моментов и общий план
+//   node scripts/shots.mjs shows   — остальные семь, по три-четыре фигуры танца на каждую
+const staged = (record: number, times: number[], group: string | undefined, name: (i: number) => string, wide = false): Shot[] =>
   times.map((time, i) => ({
     name: name(i),
     ...(group ? { group } : {}),
@@ -73,20 +74,35 @@ const staged = (times: number[], group: string | undefined, name: (i: number) =>
     ...(wide ? { raw: 1, view: { pos: [0.4, 2.5, 6.4], target: [0, 1.25, -1.3] } } : {}),
     size: [640, 360] as [number, number],
     frames: WARM + Math.round(time * 60),
-    prepare: (rig) => rig.actor.prepare?.(FILE) ?? Promise.resolve(null),
+    prepare: (rig) => (record === 0 ? rig.actor.prepare?.(FILE) : null) ?? Promise.resolve(null),
     each: (rig, f) => {
-      if (f === WARM) rig.record(0);
+      if (f === WARM) rig.record(record);
     },
   }));
+/** Секунда песни, на которой танец пластинки проходит долю x своей связки (второй круг). */
+const loopTime = (record: number, x: number) => ((8 + x) * 120) / RECORDS[record].show.bpm;
+// Какие доли связки показывать: по ним видно, как узор отвечает на фигуры танца.
+const MOMENTS: [number, string, number[]][] = [
+  [1, 'glitch', [0.5, 1.5, 3.4, 5.5]],
+  [2, 'blocks', [1, 4.6, 6.6, 7.6]],
+  [3, 'liar', [1, 2.9, 4.9, 6.9]],
+  [4, 'clinic', [0.5, 3, 5.2, 7.4]],
+  [5, 'crowd', [0.6, 3.6, 4.5, 7]],
+  [6, 'machine', [1.5, 5, 6.5, 7.5]],
+  [7, 'cute', [0.5, 1.5, 4.5, 7]],
+];
 
 export const shots: Shot[] = [
   ...DANCE_NAMES.flatMap((name) => [at(name, 9.1, 'a'), at(name, 14.1, 'b')]),
   // Шоу в обычном наборе: танец с лучами и транс со спиралью.
-  ...staged([4.2, 15], undefined, (i) => `70-show-${i ? 'trance' : 'dance'}`),
+  ...staged(0, [4.2, 15], undefined, (i) => `70-show-${i ? 'trance' : 'dance'}`),
+  ...MOMENTS.flatMap(([record, kind, xs]) => staged(record, [loopTime(record, xs[1])], undefined, () => `71-show-${kind}`)),
   ...DANCE_NAMES.flatMap(strip),
   ...filed(every(0.4, 0.8, 32), 'file-all'),
   ...filed([0.9, 3.2, 5.6, 8, 10.4, 12, 16, 23.5], 'file-site', true),
-  ...staged([0.5, 1.35, 1.9, 4.2, 6.8, 9.6, 12.1, 12.9], 'show', (i) => `62-show-${String(i).padStart(2, '0')}`),
-  ...staged([15, 19, 22.5, 26], 'show', (i) => `62-show-${String(i + 8).padStart(2, '0')}`),
-  ...staged([0.3, 4.2, 15, 22.5], 'show', (i) => `63-show-wide-${i}`, true),
+  ...staged(0, [0.5, 1.35, 1.9, 4.2, 6.8, 9.6, 12.1, 12.9, 15, 19, 22.5, 26], 'show', (i) => `62-show-${String(i).padStart(2, '0')}`),
+  ...staged(0, [0.3, 4.2, 15, 22.5], 'show', (i) => `63-show-wide-${i}`, true),
+  ...MOMENTS.flatMap(([record, kind, xs]) =>
+    staged(record, xs.map((x) => loopTime(record, x)), 'shows', (i) => `64-shows-${record}-${kind}-${i}`),
+  ),
 ];
