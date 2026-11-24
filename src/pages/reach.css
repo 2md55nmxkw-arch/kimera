@@ -58,8 +58,9 @@
   height: auto;
   pointer-events: none;
   user-select: none;
-  /* Светлые и бесцветные, как гипсовый слепок под софитом. */
-  filter: grayscale(1) brightness(1.16) drop-shadow(0 0 30px rgb(255 255 255 / 0.13));
+  /* Картинки уже сняты как гипсовый слепок под софитом (scripts/hands.mjs);
+     здесь только лёгкое свечение вокруг. */
+  filter: drop-shadow(0 0 34px rgb(255 255 255 / 0.1));
   /* Три независимых движения — три свойства: translate ведёт прокрутка, transform
      слушает указатель, rotate — медленное покачивание. */
   transform: translate3d(calc(var(--mx) * var(--lean) * 1px), calc(var(--my) * 14px), 0);
@@ -67,17 +68,17 @@
 .reach-left {
   left: 0;
   --lean: 22;
-  translate: 7% -30%;
+  translate: 13% -22%;
   transform-origin: 0 50%;
   /* К локтю рука уходит в темноту. */
-  mask-image: linear-gradient(90deg, transparent 5%, #000 44%);
+  mask-image: linear-gradient(90deg, transparent 8%, #000 52%);
 }
 .reach-right {
   right: 0;
   --lean: 16;
-  translate: -7% -40%;
+  translate: -10% -30%;
   transform-origin: 100% 50%;
-  mask-image: linear-gradient(270deg, transparent 5%, #000 44%);
+  mask-image: linear-gradient(270deg, transparent 8%, #000 52%);
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -127,18 +128,18 @@
 }
 @keyframes reach-in-left {
   from {
-    translate: -26% -30%;
+    translate: -24% -22%;
   }
   to {
-    translate: 7% -30%;
+    translate: 13% -22%;
   }
 }
 @keyframes reach-in-right {
   from {
-    translate: 26% -40%;
+    translate: 26% -30%;
   }
   to {
-    translate: -7% -40%;
+    translate: -10% -30%;
   }
 }
 @keyframes reach-seal {
@@ -230,25 +231,25 @@
     width: 92vw;
   }
   .reach-left {
-    translate: -24% -92%;
+    translate: -14% -118%;
   }
   .reach-right {
-    translate: 24% 4%;
+    translate: 12% 34%;
   }
   @keyframes reach-in-left {
     from {
-      translate: -60% -92%;
+      translate: -56% -118%;
     }
     to {
-      translate: -24% -92%;
+      translate: -14% -118%;
     }
   }
   @keyframes reach-in-right {
     from {
-      translate: 60% 4%;
+      translate: 56% 34%;
     }
     to {
-      translate: 24% 4%;
+      translate: 12% 34%;
     }
   }
 }

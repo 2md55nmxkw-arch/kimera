@@ -1,0 +1,199 @@
+/* 404: «эту страницу стёрли». Лист бумаги, на нём карандашом цифры 404, поперёк —
+   полоса от ластика, рядом сам ластик и крошки. Ни 3D, ни картинок: всё нарисовано CSS. */
+@import '@fontsource/dela-gothic-one/index.css';
+@import '@fontsource/instrument-serif/400-italic.css';
+@import '@fontsource-variable/martian-mono/index.css';
+@import '@fontsource/caveat/400.css';
+@import '@fontsource/caveat/600.css';
+@import './shared.css';
+
+/* ── верхняя строка: как в программке ──────────────────────────────────── */
+
+.bar {
+  position: fixed;
+  z-index: 2;
+  top: calc(var(--pad) * 0.8);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0 var(--pad);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.mark {
+  font-family: var(--display);
+  font-size: clamp(1rem, 1.5vw, 1.35rem);
+  letter-spacing: 0.02em;
+  text-decoration: none;
+}
+.mark [lang='ja'] {
+  margin-left: 0.4em;
+  font-size: 0.72em;
+  letter-spacing: 0.12em;
+}
+.lang {
+  display: flex;
+  gap: 0.2em;
+  font-size: 0.72rem;
+}
+.lang button {
+  padding: 0.5em 0.6em;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.lang button[aria-pressed='true'] {
+  text-decoration: underline 2px;
+  text-underline-offset: 0.45em;
+}
+
+/* ── лист ──────────────────────────────────────────────────────────────── */
+
+.lost {
+  min-height: 100svh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: clamp(0.5rem, 1.6vh, 1rem);
+  padding: calc(var(--pad) + 4rem) var(--pad) var(--pad);
+  text-align: center;
+}
+
+.sheet {
+  position: relative;
+  /* Размер цифр — от него считается всё остальное на листе. */
+  --size: clamp(7rem, 30vw, 22rem);
+  margin-bottom: clamp(0.6rem, 2vh, 1.4rem);
+}
+
+/* Цифры: контур грифелем и косая штриховка внутри, как в главе с наброском. */
+.digits {
+  font: 400 var(--size) / 0.84 var(--display);
+  letter-spacing: -0.03em;
+  color: transparent;
+  -webkit-text-stroke: clamp(1px, 0.012em, 3px) var(--graphite);
+  background:
+    repeating-linear-gradient(118deg, rgb(46 46 54 / 0.5) 0 1px, transparent 1px 0.034em),
+    repeating-linear-gradient(64deg, rgb(46 46 54 / 0.2) 0 1px, transparent 1px 0.052em);
+  -webkit-background-clip: text;
+  background-clip: text;
+  user-select: none;
+}
+
+/* Полоса от ластика: бумага светлее, рисунок под ней едва угадывается. */
+.rub {
+  position: absolute;
+  left: -6%;
+  top: 34%;
+  width: 78%;
+  height: 34%;
+  rotate: -7deg;
+  border-radius: 45% 60% 50% 40% / 60% 45% 55% 50%;
+  background: radial-gradient(closest-side, #f8f4ea 62%, rgb(248 244 234 / 0.85) 80%, transparent);
+  filter: blur(calc(var(--size) * 0.012));
+  opacity: 0.94;
+  transform-origin: 0 50%;
+}
+
+/* Сам ластик: розовый брусок в бумажной манжете, лежит там, где остановился. */
+.rubber {
+  position: absolute;
+  left: 66%;
+  top: 30%;
+  width: calc(var(--size) * 0.3);
+  height: calc(var(--size) * 0.13);
+  rotate: -24deg;
+  border-radius: calc(var(--size) * 0.018);
+  background: linear-gradient(90deg, #f0647f 0 34%, #f6f1e6 34% 78%, #2a2a31 78%);
+  box-shadow:
+    inset 0 calc(var(--size) * -0.012) 0 rgb(0 0 0 / 0.12),
+    calc(var(--size) * 0.012) calc(var(--size) * 0.022) calc(var(--size) * 0.03) rgb(40 30 20 / 0.28);
+}
+
+/* Крошки: точки расставляет pages/notfound.ts, здесь только их вид. */
+.crumbs i {
+  position: absolute;
+  width: calc(var(--size) * var(--s));
+  height: calc(var(--size) * var(--s) * var(--k));
+  rotate: var(--r);
+  border-radius: 40% 60% 50% 50%;
+  background: #8b857d;
+  box-shadow: 1px 2px 1px rgb(40 30 20 / 0.22);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Страница открывается — ластик проходит по цифрам. */
+  .rub {
+    animation: rub-across 1.1s cubic-bezier(0.3, 0.1, 0.2, 1) 0.25s both;
+  }
+  .rubber {
+    animation: rubber-across 1.1s cubic-bezier(0.3, 0.1, 0.2, 1) 0.25s both;
+  }
+  .crumbs i {
+    animation: crumb-fall 0.5s ease-out both;
+    animation-delay: calc(0.35s + var(--d) * 0.9s);
+  }
+}
+@keyframes rub-across {
+  from {
+    scale: 0 1;
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.94;
+  }
+  to {
+    scale: 1 1;
+  }
+}
+@keyframes rubber-across {
+  from {
+    left: -8%;
+    top: 46%;
+    rotate: -12deg;
+  }
+  50% {
+    rotate: -30deg;
+  }
+}
+@keyframes crumb-fall {
+  from {
+    opacity: 0;
+    translate: 0 -0.6rem;
+  }
+}
+
+/* ── подписи ───────────────────────────────────────────────────────────── */
+
+.note {
+  color: var(--graphite);
+  font: 600 clamp(2rem, 5.4vw, 3.6rem) / 1 'Caveat', cursive;
+  rotate: -1.5deg;
+}
+.aside {
+  color: var(--graphite);
+  font: 400 clamp(1.15rem, 2.6vw, 1.6rem) / 1.1 'Caveat', cursive;
+  opacity: 0.75;
+}
+.back {
+  margin-top: clamp(1rem, 3vh, 2rem);
+  padding: 0.7em 1.1em;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-decoration: none;
+  box-shadow: 4px 4px 0 var(--pink-ink);
+  transition: translate 0.15s, box-shadow 0.15s;
+}
+.back:hover {
+  color: var(--paper);
+  translate: 2px 2px;
+  box-shadow: 2px 2px 0 var(--pink-ink);
+}

@@ -2,7 +2,36 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>404</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>404 — KIMERA</title>
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#f4efe4" />
+    <meta name="referrer" content="no-referrer" />
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/pages/notfound.css" />
   </head>
-  <body></body>
+  <body>
+    <header class="bar">
+      <a class="mark" href="/" data-home>Kimera <span lang="ja">キメラ</span></a>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true" lang="en">EN</button>
+        <button type="button" data-lang="ru" aria-pressed="false" lang="ru">RU</button>
+      </div>
+    </header>
+
+    <!-- Страницы нет: цифры нарисованы карандашом, и по ним уже прошёлся ластик. -->
+    <main class="lost">
+      <div class="sheet" aria-hidden="true">
+        <p class="digits">404</p>
+        <span class="rub"></span>
+        <span class="rubber"></span>
+        <span class="crumbs"></span>
+      </div>
+      <h1 class="note" data-t="title">This page was erased.</h1>
+      <p class="aside" data-t="aside">Or nobody got round to drawing it.</p>
+      <a class="back" href="/" data-home data-t="back">← back to the stage</a>
+    </main>
+
+    <script type="module" src="/src/pages/notfound.ts"></script>
+  </body>
 </html>

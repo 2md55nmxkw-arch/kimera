@@ -193,7 +193,7 @@ const FIST = arm({
 const HELLO = arm({
   hand: [0.25, 1.31, 0.12],
   elbow: [0.6, -1, 0],
-  twist: Math.PI,
+  twist: -Math.PI / 2, // ладонью к тому, кому машет
   wrist: [0, 0, 0.12],
   fingers: [0.05, 0, 0, 0.03, 0.06],
   spread: 0.14,

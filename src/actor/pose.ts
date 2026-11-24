@@ -103,7 +103,7 @@ export const POSES: Pose[] = [
     right: arm({
       hand: [0.27, 1.4, 0.09],
       elbow: [0.6, -1, 0],
-      twist: Math.PI, // ладонью к зрителю
+      twist: -Math.PI / 2, // ладонью к зрителю (при π ладонь смотрела вбок)
       wrist: [0, 0, 0.12],
       fingers: [0.05, 0, 0, 0.03, 0.06],
       spread: 0.14,

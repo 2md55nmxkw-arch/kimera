@@ -3,8 +3,10 @@
 //   node scripts/hands.mjs [--size=1600x1000] [--preview]
 //
 // Руки — самой Тето: модель ставится в позу «руки в стороны», камера подходит к
-// кисти, всё остальное со сцены убирается, и кадр снимается дважды — цвет и слой
-// меток. По меткам строится прозрачность: остаётся только рука на пустом фоне.
+// кисти, всё остальное со сцены убирается. Модель на время съёмки одета в гладкий
+// светлый материал и освещена одним софитом — получается гипсовый слепок руки с
+// объёмом и тенями, а не плоская заливка. Кадр снимается дважды — цвет и слой
+// меток; по меткам строится прозрачность, остаётся только рука на пустом фоне.
 // Снимается вдвое крупнее и уменьшается — так край получается сглаженным.
 // --preview кладёт рядом shots/reach.png: обе руки на тёмном фоне, как в секции.
 // Переснимать после смены модели или её материалов.
@@ -47,7 +49,17 @@ try {
       actor.root.traverse((o) => kept.add(o));
       scene.traverse((o) => {
         if (o.isMesh && !kept.has(o)) o.visible = false;
+        if (o.isLight) o.intensity = 0;
       });
+      // Гипс вместо рисованного материала: у него есть светотень.
+      const plaster = new THREE.MeshStandardNodeMaterial({ color: '#efede8', roughness: 0.72, metalness: 0 });
+      actor.root.traverse((o) => {
+        if (o.isMesh) o.material = plaster;
+      });
+      const key = new THREE.DirectionalLight('#ffffff', 2.9);
+      const rim = new THREE.DirectionalLight('#cdd6ff', 1.1);
+      const fill = new THREE.HemisphereLight('#ffffff', '#08080a', 0.05);
+      scene.add(key, key.target, rim, rim.target, fill);
 
       /** Поставить руку: всё выпрямлено в стороны, кисть и пальцы — по описанию. */
       const pose = (side, hand) => {
@@ -89,15 +101,24 @@ try {
         const elbow = vrm.humanoid.getRawBoneNode(`${p}LowerArm`).getWorldPosition(new THREE.Vector3());
         // В кадре — от локтя до кончиков пальцев; рука входит со своего края.
         const along = wrist.clone().sub(elbow).normalize();
-        const centre = wrist.clone().addScaledVector(along, 0.05);
+        const centre = wrist.clone().addScaledVector(along, 0.072);
         centre.y -= 0.02;
         rig.resizeTo(W * 2, H * 2, 1);
         camera.clearViewOffset();
         camera.aspect = W / H;
         camera.updateProjectionMatrix();
-        camera.position.set(centre.x, centre.y + 0.02, centre.z + 0.41);
+        camera.position.copy(centre).addScaledVector(along, 0.045).add(new THREE.Vector3(0, 0.035, 0.31));
         camera.lookAt(centre);
         camera.updateMatrixWorld();
+        // Софит стоит со стороны пальцев, чуть сверху и спереди: кончики пальцев светлее
+        // всего, низ кисти и предплечье уходят в тень. Камера тоже сдвинута к пальцам —
+        // рука тянется немного на зрителя.
+        key.position.copy(centre).addScaledVector(along, 0.9).add(new THREE.Vector3(0, 0.55, 0.45));
+        key.target.position.copy(centre);
+        rim.position.copy(centre).addScaledVector(along, -0.3).add(new THREE.Vector3(0, 0.6, -1.0));
+        rim.target.position.copy(centre);
+        key.target.updateMatrixWorld();
+        rim.target.updateMatrixWorld();
 
         u.raw.value = 1;
         rig.render();
@@ -123,9 +144,9 @@ try {
 
       return {
         // Левая: кисть расслаблена и чуть опущена, пальцы свисают.
-        left: await shoot(1, { raise: 0.06, twist: 0.25, drop: 0.38, sway: 0.0, curl: [0.1, 0.3, 0.42, 0.5], spread: 0.06, thumb: 0.25 }),
+        left: await shoot(1, { raise: 0.05, twist: 0.3, drop: 0.34, sway: 0.0, curl: [0.12, 0.26, 0.34, 0.4], spread: 0.07, thumb: 0.2 }),
         // Правая: тянется указательным, остальные подобраны.
-        right: await shoot(-1, { raise: -0.04, twist: 0.1, drop: 0.12, sway: 0.0, curl: [0.03, 0.42, 0.55, 0.62], spread: 0.04, thumb: 0.45 }),
+        right: await shoot(-1, { raise: -0.04, twist: 0.2, drop: 0.14, sway: 0.0, curl: [0.02, 0.36, 0.46, 0.52], spread: 0.05, thumb: 0.35 }),
       };
     },
     { W, H },
@@ -143,8 +164,8 @@ try {
     // Обе руки на тёмном фоне — посмотреть, как они сойдутся в секции.
     await page.setViewportSize({ width: 1400, height: 620 });
     await page.setContent(`<body style="margin:0;background:#0a0a0b;height:100vh;position:relative;overflow:hidden">
-      <img src="data:image/webp;base64,${shots.left}" style="position:absolute;left:-4%;top:14%;width:50%;filter:grayscale(1) brightness(1.2)">
-      <img src="data:image/webp;base64,${shots.right}" style="position:absolute;right:-4%;top:8%;width:50%;filter:grayscale(1) brightness(1.2)">
+      <img src="data:image/webp;base64,${shots.left}" style="position:absolute;left:-3%;top:14%;width:52%;-webkit-mask-image:linear-gradient(90deg,transparent 8%,#000 52%)">
+      <img src="data:image/webp;base64,${shots.right}" style="position:absolute;right:-3%;top:8%;width:52%;-webkit-mask-image:linear-gradient(270deg,transparent 8%,#000 52%)">
     </body>`);
     await page.waitForTimeout(300);
     await mkdir(path.join(root, 'shots'), { recursive: true });
