@@ -55,7 +55,8 @@ export function buildComposite(scenePass: N, u: SkinUniforms, trail: N): N {
       .sub(smoothstep(inkWidth.mul(0.7), inkWidth.mul(2.0), abs(ink.sub(0.35))))
       .mul(u.trailGain)
       .mul(float(1).sub(inside));
-    const toB: N = max(inside, inkMask).toVar(); // 0 — шкура A, 1 — шкура B
+    // Ластик (fx/eraser.ts) — та же линза, но под ней не соседняя шкура, а стёртый лист.
+    const toB: N = max(inside.mul(float(1).sub(u.erase)), inkMask).toVar(); // 0 — шкура A, 1 — шкура B
 
     // ── шкуры ───────────────────────────────────────────────────────────
     // Шкура дорогая, поэтому считается только там, где она видна: снаружи линзы

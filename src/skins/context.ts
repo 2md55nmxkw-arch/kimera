@@ -42,6 +42,7 @@ export function createUniforms(camera: THREE.PerspectiveCamera) {
     clock: uniform(0), // своё время: замирает при prefers-reduced-motion
     raw: uniform(0), // отладка: 1 — сцена без шкур, 2 — слой меток
     trailGain: uniform(0), // насколько виден чернильный след за линзой
+    erase: uniform(0), // 0…1: линза работает ластиком и соседнюю шкуру не показывает
     head: uniform(new THREE.Vector2(0.6, 0.35)), // центр лица на экране, uv
     headSize: uniform(0.12), // радиус головы в долях высоты экрана
     cheekL: uniform(new THREE.Vector2(0.62, 0.38)), // щёки на экране — для штрихов румянца

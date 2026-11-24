@@ -14,6 +14,7 @@ import {
   length,
   luminance,
   max,
+  min,
   mix,
   saturate,
   smoothstep,
@@ -22,6 +23,7 @@ import {
   vec2,
 } from 'three/tsl';
 import type { Frame, Part } from '../core/contracts';
+import { sheetState } from '../fx/eraser';
 import { clamp, smooth } from '../core/math';
 import { hash21, paint, rot, srgb, toLinear, type N, type SkinContext } from './context';
 import { GAP_CELLS, HAND_CELL, HAND_ROWS, invalidateSketchPrep, sketchPrep } from './sketch-prep';
@@ -86,13 +88,18 @@ export function sketchSkin(c: SkinContext): N {
   const hand3: N = handRow(3);
   const sheet: N = prep.sheet.sample(css.mul(u.dpr).div(prep.sheetSize)).level(0).toVar();
   const lum = (p: N): N => luminance(srgb(colorAt(p).rgb));
+  // Состояние листа (fx/eraser.ts): r — насколько место перерисовано после ластика,
+  // g — бумагу тёрли, b — крошка ластика, a — графитовое пятно от тычка.
+  const state: N = sheetState.sample(uv).level(0).toVar();
+  // Ход рисования в этой точке: общий, но не дальше, чем успело перерисоваться стёртое.
+  const drawHere: N = min(sketchU.draw, state.r).toVar();
 
   // Ход рисования. Набросок появляется не весь сразу и не ровной волной:
   // от головы наружу, пятнами и вытянутыми вдоль штриха полосами — как идёт рука.
   // order — «когда дойдёт очередь до этой точки», 0 у лица … 1 на краях.
   const order: N = saturate(heads.mul(0.075).add(sheet.b.div(2.0))).toVar();
   /** Доля общего хода, отведённая этапу [from, to], 0…1. */
-  const phase = (from: number, to: number): N => saturate(sketchU.draw.sub(from).div(to - from));
+  const phase = (from: number, to: number): N => saturate(drawHere.sub(from).div(to - from));
   /** Нарисован ли в этой точке слой, который рисуют на этапе [from, to]. */
   const drawn = (from: number, to: number): N =>
     smoothstep(order.mul(0.82), order.mul(0.82).add(0.1), phase(from, to));
@@ -222,12 +229,23 @@ export function sketchSkin(c: SkinContext): N {
 
   // Графит ложится на зерно бумаги. Слои не складываются, а перекрывают друг
   // друга: два штриха в одном месте темнее одного, но не чёрные.
-  const grain: N = tooth.mul(0.5).add(0.62);
+  // Там, где бумагу тёрли ластиком, зерно сглажено.
+  const grain: N = mix(tooth.mul(0.5).add(0.62), 0.87, state.g.mul(0.6));
   let bare: N = float(1); // сколько бумаги осталось видно
   for (const layer of [inkA, inkB, inkC, inkOuter, shading, solid, blush, construction]) {
     bare = bare.mul(float(1).sub(saturate(layer.mul(grain))));
   }
   // Лёгкая растушёвка в тенях, чтобы форма не была плоской.
   const smudge: N = float(1).sub(smoothstep(0.15, 0.6, tone)).mul(fg).mul(0.07).mul(finishing);
-  return toLinear(mix(paint('#2e2e36'), paper.mul(float(1).sub(smudge)), bare));
+  const graphite: N = paint('#2e2e36');
+  // Тёртая бумага чуть светлее нетронутой.
+  const sheetTone: N = paper.mul(state.g.mul(0.035).add(1.0)).mul(float(1).sub(smudge));
+  const drawing: N = mix(graphite, sheetTone, bare);
+  // Пятно от тычка: графит, втёртый пальцем в зерно бумаги.
+  const smeared: N = mix(drawing, graphite, state.a.mul(tooth.mul(0.4).add(0.5)).mul(0.3));
+  // Крошки ластика лежат поверх рисунка и отбрасывают короткую тень вправо-вниз.
+  const crumb: N = smoothstep(0.3, 0.55, state.b);
+  const crumbShadow: N = smoothstep(0.3, 0.55, sheetState.sample(uv.sub(pxUV.mul(vec2(1.6, 2.2)))).level(0).b);
+  const littered: N = mix(smeared.mul(float(1).sub(crumbShadow.mul(0.25))), paint('#7f7972'), crumb.mul(0.9));
+  return toLinear(littered);
 }

@@ -31,6 +31,8 @@ export interface Rig {
   reset(): void;
   step(dt: number, env: StepEnv): void;
   render(): void;
+  /** Короткий клик в точке экрана, доли от левого верхнего угла. */
+  tap(x: number, y: number): void;
   /** Прокрутить страницу к главе, чтобы текст совпал с картинкой. */
   scrollTo(s: number): void;
   /** Дождаться, пока видеокарта дорисует кадр. */

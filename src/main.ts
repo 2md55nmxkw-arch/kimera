@@ -19,6 +19,7 @@ import { clamp, smooth } from './core/math';
 import { createQuality, levelFrom } from './core/quality';
 import { reseed } from './core/random';
 import { guardDevice, recoveryPlan } from './core/recovery';
+import { createEraser } from './fx/eraser';
 import { createTrail } from './fx/trail';
 import { SKINS, buildComposite, createUniforms } from './skins';
 import { createSketchDraw } from './skins/sketch';
@@ -88,17 +89,16 @@ async function boot() {
   say(hudTech, actor.kind === 'vrm' ? 'hud.model' : 'hud.standin', isWebGPU ? 'WebGPU' : 'WebGL 2');
   bindLangSwitch(document);
 
-  const ndcOf = (clientX: number, clientY: number) =>
-    [(clientX / innerWidth) * 2 - 1, 1 - (clientY / innerHeight) * 2] as const;
-  const input = createInput((clientX, clientY) => {
-    const [nx, ny] = ndcOf(clientX, clientY);
-    const x = clientX / innerWidth;
-    const y = clientY / innerHeight;
+  /** Короткий клик в точке экрана (доли от левого верхнего угла). */
+  const tap = (x: number, y: number) => {
+    const nx = x * 2 - 1;
+    const ny = 1 - y * 2;
     // Попали в персонажа — он реагирует, а в точке клика расходится чернильное кольцо.
     const zone = actor.poke?.(nx, ny, camera) ?? null;
     if (zone) trail.splash(x, y);
     for (const part of parts) part.poke?.({ x, y, zone });
-  });
+  };
+  const input = createInput((clientX, clientY) => tap(clientX / innerWidth, clientY / innerHeight));
   const pointer = input.pointer;
 
   // Ручки для отладки из консоли dev-сборки: своя камера и остановка хода наброска.
@@ -110,7 +110,8 @@ async function boot() {
     y: u.head.value.y * innerHeight,
     r: u.headSize.value * innerHeight * 1.15,
   }));
-  const parts: Part[] = [createSketchDraw(SKINS.indexOf('Sketch'), debugView), labels];
+  const eraser = createEraser(renderer, SKINS.indexOf('Sketch'));
+  const parts: Part[] = [createSketchDraw(SKINS.indexOf('Sketch'), debugView), eraser, labels];
 
   // ── что к чему привязано ───────────────────────────────────────────────
   // Гримёрка: анкета. Часть фактов живёт на самой Тето, часть — на вещах.
@@ -221,7 +222,10 @@ async function boot() {
 
     u.pointer.value.set(pointer.x, pointer.y);
     // Радиус задан в долях высоты; на узком экране линзу уменьшаем, чтобы не съедала всю ширину.
-    const lensRest = 0.2 * clamp(aspect * 0.9, 0.55, 1) * (1 + pointer.press * 0.9);
+    // Зажатая линза раздвигается; в главе наброска она ластик и, наоборот, сжимается —
+    // маленькой резинкой стирают точнее.
+    const squeeze = chapter === COUNT - 1 && q > 0.14 ? -0.42 : 0.9;
+    const lensRest = 0.2 * clamp(aspect * 0.9, 0.55, 1) * (1 + pointer.press * squeeze);
     const lens = lensRadius(q, lensRest, Math.hypot(aspect, 1) + 0.15);
     u.lens.value = lens;
     u.clock.value = t;
@@ -233,6 +237,9 @@ async function boot() {
     trail.update(dt, t, pointer.x, pointer.y, aspect, lensRest * 0.8, speed, pointer.press);
 
     for (const part of parts) part.step?.(frame);
+    // В главе наброска зажатая линза — ластик: соседнюю шкуру и чернильный след не показывает.
+    u.erase.value = eraser.erase;
+    u.trailGain.value *= 1 - eraser.hold;
 
     placeCamera(camera, frame, actor.headY, debugView);
     stage.step(frame);
@@ -312,6 +319,7 @@ async function boot() {
       resize,
       reset,
       step,
+      tap,
       scrollTo(s) {
         const vh = sections[0]?.offsetHeight || innerHeight;
         scrollTo({ top: Math.round(s) * vh, behavior: 'instant' });
