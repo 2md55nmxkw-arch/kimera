@@ -13,21 +13,27 @@ npm install
 npm run dev
 ```
 
-## What is not in this repository
+## The model and the dance are not yours to take from here
 
-Two files are left out on purpose: their authors do not allow redistribution.
+Two files belong to other authors, who do not allow redistribution:
 
 - **The character model.** rurune式重音テト, free VRM by rurune:
-  <https://rurunerune.booth.pm/items/8000175>. Download it from the author and save it as
-  `public/models/teto.vrm`. Without it the site shows a plain stand-in figure.
-- **The Mesmerizer dance.** "Teto Mesmerizer Motion by sir vee" (MMD). With the author's
-  `.vmd` at hand:
+  <https://rurunerune.booth.pm/items/8000175>.
+- **The Mesmerizer dance.** "Teto Mesmerizer Motion by sir vee" (MMD).
 
-  ```bash
-  node scripts/motion.mjs "<path to the Teto .vmd>" public/motions/mesmerizer.kmt --credit="Motion by sir vee"
-  ```
+They are kept in `sealed/` encrypted, only so that this site's own build can use them;
+the key is not in the repository, and the published site carries the model embedded in
+its own format, not as a `.vrm` file. If you want them, get them from their authors.
 
-  Without it Teto dances the site's own routine for that song.
+To run the site with them locally, save the model as `public/models/teto.vrm` and convert
+the dance:
+
+```bash
+node scripts/motion.mjs "<path to the Teto .vmd>" public/motions/mesmerizer.kmt --credit="Motion by sir vee"
+```
+
+Without the model the site shows a plain stand-in figure; without the dance Teto dances
+the site's own routine for that song.
 
 ## Credits
 

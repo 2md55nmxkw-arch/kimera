@@ -4,6 +4,7 @@ import { MToonMaterialLoaderPlugin, VRMLoaderPlugin, VRMUtils, type VRM } from '
 import { MToonNodeMaterial } from '@pixiv/three-vrm/nodes';
 import { applyDance, type DanceName } from './dance';
 import { loadMotion, type Motion, type MotionInfo } from './motion';
+import { download, unpack } from './packed';
 import { createLife, type IdleName } from './life';
 import { createMemory, type Memory } from './memory';
 import { markBodyParts } from './parts';
@@ -83,9 +84,13 @@ export interface Actor {
 // Модель лежит в public/models/teto.vrm. Пока её нет, на сцене стоит манекен.
 /** @param onProgress доля загруженного файла модели, 0…1 */
 export async function loadActor(url: string, onProgress?: (loaded: number) => void): Promise<Actor> {
-  if (await exists(url)) {
+  // На опубликованном сайте модель лежит вшитой (.kmd, см. packed.ts), при разработке
+  // рядом лежит сам .vrm. Что вероятнее найти, то и спрашиваем первым.
+  const packed = url.replace(/\.vrm$/, '.kmd');
+  for (const from of import.meta.env.DEV ? [url, packed] : [packed, url]) {
+    if (!(await exists(from))) continue;
     try {
-      return await loadVRM(url, onProgress);
+      return await loadVRM(from, from === packed, onProgress);
     } catch (err) {
       console.warn('[kimera] VRM не загрузилась, ставлю манекен:', err);
     }
@@ -106,7 +111,7 @@ async function exists(url: string): Promise<boolean> {
 // Во сколько раз усилить отклонение взгляда перед тем, как отдать его модели.
 const EYE_GAIN = 3;
 
-async function loadVRM(url: string, onProgress?: (loaded: number) => void): Promise<Actor> {
+async function loadVRM(url: string, packed: boolean, onProgress?: (loaded: number) => void): Promise<Actor> {
   const loader = new GLTFLoader();
   loader.register(
     (parser) =>
@@ -118,9 +123,11 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
       }),
   );
 
-  const gltf = await loader.loadAsync(url, (e) => {
-    if (e.lengthComputable && e.total > 0) onProgress?.(e.loaded / e.total);
-  });
+  const gltf = packed
+    ? await loader.parseAsync(unpack(await download(url, onProgress)), '')
+    : await loader.loadAsync(url, (e) => {
+        if (e.lengthComputable && e.total > 0) onProgress?.(e.loaded / e.total);
+      });
   const vrm = gltf.userData.vrm as VRM | undefined;
   if (!vrm) throw new Error('в файле нет данных VRM');
 

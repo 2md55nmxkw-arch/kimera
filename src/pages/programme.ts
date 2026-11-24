@@ -115,7 +115,7 @@ function render(c: ProgrammeCopy): string {
       ${row(c.company.character, `${ja('重音テト')} Kasane Teto`)}
       ${row(c.company.illustration, ja('線'))}
       ${row(c.company.voice, ja('小山乃舞世'))}
-      ${row(c.company.model, `${ja('rurune式重音テト')} <small>${esc(c.company.modelNote)}</small> ${esc(c.company.modelBy)} rurune`)}
+      ${row(c.company.model, `<a href="https://rurunerune.booth.pm/items/8000175" rel="noopener noreferrer">${ja('rurune式重音テト')}</a> <small>${esc(c.company.modelNote)}</small> ${esc(c.company.modelBy)} rurune`)}
       ${row(c.company.dance, `Motion by sir vee <small>${esc(c.company.danceNote)}</small>`)}
       ${row(c.company.staging, `<em>${esc(c.company.unsigned)}</em>`)}
     </dl>
