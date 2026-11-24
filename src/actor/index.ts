@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MToonMaterialLoaderPlugin, VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import { MToonNodeMaterial } from '@pixiv/three-vrm/nodes';
+import { applyDance, type DanceName } from './dance';
 import { createLife, type IdleName } from './life';
 import { createMemory, type Memory } from './memory';
 import { markBodyParts } from './parts';
@@ -62,6 +63,13 @@ export interface Actor {
   reset?(): void;
   /** Играет музыка: она слушает — улыбается и покачивает головой. */
   listen?(on: boolean): void;
+  /**
+   * Танцевать (actor/dance.ts) или перестать (null).
+   * @param tempo движений в минуту
+   */
+  dance?(name: DanceName | null, tempo?: number): void;
+  /** Где сейчас песня, секунды: танец подстраивается под плеер. */
+  danceAt?(seconds: number): void;
   /** Для отладки из консоли в dev-сборке. */
   debug?: unknown;
 }
@@ -148,6 +156,12 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
   const life = createLife();
   let wantListen = false;
   let listening = 0; // 0…1, плавно
+  // Танец: какой, в каком темпе, сколько секунд песни прошло и насколько он взял верх.
+  let danceName: DanceName | null = null;
+  let danceShown: DanceName = 'sway';
+  let danceTempo = 96;
+  let danceClock = 0;
+  let dancing = 0;
   const memory = createMemory();
   // Гладили в прошлый раз — машет, доводили — косится. Сброс (reset) приветствие отменяет.
   life.greet(memory.standing === 'kind' ? 'wave' : memory.standing === 'wary' ? 'wary' : null);
@@ -282,9 +296,22 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
     listen(on) {
       wantListen = on;
     },
+    dance(name, tempo = 96) {
+      if (name && name !== danceName && dancing < 0.05) danceClock = 0;
+      danceName = name;
+      danceTempo = tempo;
+    },
+    danceAt(seconds) {
+      // Плеер сообщает время песни несколько раз в секунду; мелкие расхождения не трогаем,
+      // чтобы танец не дёргался, крупные (перемотка) — принимаем сразу.
+      if (Math.abs(seconds - danceClock) > 0.15) danceClock = seconds;
+    },
     reset() {
       wantListen = false;
       listening = 0;
+      danceName = null;
+      danceClock = 0;
+      dancing = 0;
       yaw.v = 0;
       pitch.v = 0;
       seen.ready = false;
@@ -312,7 +339,7 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
         idle: mood.idle ?? 0,
         still,
         press: mood.press,
-        busy: reactor.busy,
+        busy: reactor.busy || danceName !== null, // пока танцует, не зевает и не скучает
         chapter: mood.chapter,
         speed,
         eye: camera.position,
@@ -321,12 +348,20 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
       });
       // Играет музыка: слушает — улыбка, голова покачивается, лёгкий подскок в такт.
       // Настоящего такта страница не знает (плеер чужой), поэтому темп спокойный и общий.
+      if (danceName) {
+        danceShown = danceName;
+        danceClock += dt;
+      }
+      dancing += ((danceName && !still ? 1 : 0) - dancing) * (1 - Math.exp(-dt * 4));
+      if (dancing > 0.002) applyDance(danceShown, (danceClock * danceTempo) / 60, dancing, live);
       listening += ((wantListen && !still ? 1 : 0) - listening) * (1 - Math.exp(-dt * 2.5));
-      if (listening > 0.002) {
+      // Слушает, когда музыка открыта, но не танцует (пауза, загрузка).
+      if (listening * (1 - dancing) > 0.002) {
         const beat = t * 3.4;
-        live.happy = Math.max(live.happy, 0.55 * listening);
-        live.headRoll += Math.sin(beat) * 0.055 * listening;
-        live.bob += Math.abs(Math.sin(beat)) * 0.007 * listening;
+        const calmly = listening * (1 - dancing);
+        live.happy = Math.max(live.happy, 0.55 * calmly);
+        live.headRoll += Math.sin(beat) * 0.055 * calmly;
+        live.bob += Math.abs(Math.sin(beat)) * 0.007 * calmly;
       }
       // Обиделась — на курсор не смотрит; заскучала — следит вполглаза.
       const attend = (1 - react.ignore) * live.attend;

@@ -132,9 +132,14 @@ async function boot() {
   labels.anchor('profile.sheet', at('mirror'), -90);
   labels.anchor('profile.phrase', at('note'), -60);
   labels.anchor('profile.bread', at('bread'), 180);
-  // Пластинки: этикетка с кнопкой «слушать», по ней открывается плеер. Пока играет
-  // музыка, Тето слушает.
-  const player = createPlayer((playing) => actor.listen?.(playing));
+  // Пластинки: этикетка с кнопкой «слушать», по ней открывается плеер.
+  // Что плеер знает о музыке, то и передаём Тето: стоит пластинка — слушает,
+  // музыка идёт — танцует танец этой песни в её темпе, пауза — замирает.
+  const player = createPlayer({
+    onRecord: (item) => actor.listen?.(item !== null),
+    onPlaying: (playing, item) => actor.dance?.(playing ? item.dance : null, item.tempo),
+    onTime: (seconds) => actor.danceAt?.(seconds),
+  });
   RECORDS.forEach((record, i) => {
     labels.anchorItem(record.fact, at(`record-${i}`), 180, () => player.play(record));
   });
