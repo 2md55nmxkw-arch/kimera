@@ -24,6 +24,11 @@ const MOODS: Mood[] = [
 export interface Lights {
   /** @param s положение прокрутки в главах */
   step(s: number): void;
+  /**
+   * Контровой свет из-за спины. step() каждый кадр ставит его по настроению главы;
+   * шоу под музыку (fx/show.ts) после этого может его перекрасить.
+   */
+  rim: THREE.DirectionalLight;
 }
 
 /** @param shadows отбрасывать ли тени (на слабых машинах выключено) */
@@ -59,6 +64,7 @@ export function createLights(scene: THREE.Scene, shadows: boolean): Lights {
   const mix = (target: THREE.Color, from: string, to: string, t: number) => target.copy(a.set(from)).lerp(b.set(to), t);
 
   return {
+    rim,
     step(s) {
       const last = MOODS.length - 1;
       const i = Math.min(Math.floor(Math.max(s, 0)), last);

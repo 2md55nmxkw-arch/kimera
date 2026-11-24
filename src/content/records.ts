@@ -9,6 +9,7 @@
 // проверь её так же: https://www.youtube.com/oembed?url=<адрес видео>&format=json
 import type { DanceName } from '../actor/dance';
 import type { MotionClip, MotionInfo } from '../actor/motion';
+import type { ShowInfo } from '../fx/show';
 import type { Fact } from './facts';
 
 export interface RecordItem {
@@ -28,6 +29,8 @@ export interface RecordItem {
    * месте может и не быть — он не коммитится, — тогда идёт свой танец.
    */
   motion?: MotionInfo;
+  /** Шоу на сцене, пока играет пластинка (fx/show.ts). Есть не у всех. */
+  show?: ShowInfo;
   /** То, что показывает этикетка. */
   fact: Fact;
 }
@@ -103,6 +106,7 @@ export const RECORDS: RecordItem[] = [
   {
     ...record(1, '19y8YTbvri8', 'メズマライザー', 'Mesmerizer', 'サツキ', true, ['#e0418f', '#35c7c0'], 'hypno', 92.5),
     motion: { url: '/motions/mesmerizer.kmt', clips: mesmerizer() },
+    show: { kind: 'hypno', colors: ['#e0418f', '#35c7c0'], bpm: 185, drop: 1.43 },
   },
   record(2, 'LLjfal8jCYI', 'オーバーライド', 'Override', '吉田夜世', false, ['#f08a24', '#201c22'], 'glitch', 102),
   record(3, 'Soy4jGPHr3g', 'テトリス', 'Tetoris', '柊マグネタイト', false, ['#d8322e', '#f3e9d2'], 'blocks', 85),

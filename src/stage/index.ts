@@ -14,6 +14,8 @@ import { createTurntable } from './turntable';
 export interface Stage {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
+  /** Контровой свет: его перекрашивает шоу под музыку. */
+  rim: THREE.DirectionalLight;
   step(frame: Frame): void;
   reset(): void;
 }
@@ -75,6 +77,7 @@ export function createStage(shadows: boolean): Stage {
   return {
     scene,
     camera,
+    rim: lights.rim,
     reset() {
       turntable.reset();
     },

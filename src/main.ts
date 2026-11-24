@@ -12,7 +12,7 @@ import { loadActor } from './actor';
 import { bindLangSwitch, say, type Key } from './content/i18n';
 import { createLabels } from './content/labels';
 import { createPlayer } from './content/player';
-import { RECORDS } from './content/records';
+import { RECORDS, type RecordItem } from './content/records';
 import type { Rig } from './core/capture';
 import { chapterAt, lensRadius } from './core/chapters';
 import type { Frame, Part, StepEnv } from './core/contracts';
@@ -23,6 +23,7 @@ import { createQuality, levelFrom } from './core/quality';
 import { reseed } from './core/random';
 import { guardDevice, recoveryPlan } from './core/recovery';
 import { createEraser } from './fx/eraser';
+import { createShow } from './fx/show';
 import { createTrail } from './fx/trail';
 import { SKINS, buildComposite, createUniforms } from './skins';
 import { createSketchDraw } from './skins/sketch';
@@ -135,13 +136,25 @@ async function boot() {
   // Пластинки: этикетка с кнопкой «слушать», по ней открывается плеер.
   // Что плеер знает о музыке, то и передаём Тето: стоит пластинка — слушает,
   // музыка идёт — танцует танец этой песни в её темпе, пауза — замирает.
+  // У некоторых пластинок есть и шоу: гримёрку закрывает задник, сцена живёт в такт.
+  const show = createShow(stage.rim);
+  scene.add(show.root);
+  /** Пластинку поставили или сняли. */
+  const stand = (item: RecordItem | null) => {
+    actor.listen?.(item !== null);
+    show.set(item?.show ?? null);
+    // Пока идёт шоу, текст главы и этикетки вещей уходят: сцена занята другим.
+    root.toggleAttribute('data-on-air', Boolean(item?.show) && !reducedMotion.matches);
+  };
+  /** Музыка пошла или встала. */
+  const spin = (playing: boolean, item: RecordItem) => actor.dance?.(playing ? item.dance : null, item.tempo, item.motion ?? null);
   const player = createPlayer({
     onRecord: (item) => {
-      actor.listen?.(item !== null);
+      stand(item);
       // Танец из файла грузим заранее; есть файл — в плеере появится подпись автора движения.
       if (item?.motion) void actor.prepare?.(item.motion).then((credit) => player.credit(item, credit));
     },
-    onPlaying: (playing, item) => actor.dance?.(playing ? item.dance : null, item.tempo, item.motion ?? null),
+    onPlaying: spin,
     onTime: (seconds) => actor.danceAt?.(seconds),
   });
   RECORDS.forEach((record, i) => {
@@ -206,6 +219,8 @@ async function boot() {
     actor.reset?.();
     trail.reset();
     stage.reset();
+    show.reset();
+    root.removeAttribute('data-on-air');
     for (const part of parts) part.reset?.();
   }
 
@@ -264,6 +279,12 @@ async function boot() {
     u.trailGain.value *= 1 - eraser.hold;
 
     placeCamera(camera, frame, actor.headY, debugView);
+    // Шоу может чуть наехать камерой (значение с прошлого кадра: на глаз не отличить).
+    const zoom = debugView.on ? 1 : 1 + show.zoom;
+    if (camera.zoom !== zoom) {
+      camera.zoom = zoom;
+      camera.updateProjectionMatrix();
+    }
     stage.step(frame);
     actor.update(
       dt,
@@ -277,6 +298,9 @@ async function boot() {
       camera,
       { chapter: s, press: pointer.press, idle: frame.idle, still },
     );
+
+    const music = actor.music?.();
+    show.step(dt, music?.time ?? 0, music?.on ?? 0, still, camera.position);
 
     // Где на экране лицо и какого оно размера: вокруг него строится витражная роза,
     // от него отсчитывается «недорисованность» эскиза и свет на фоне.
@@ -347,6 +371,12 @@ async function boot() {
       reset,
       step,
       tap,
+      record(i) {
+        const item = i === null ? null : RECORDS[i];
+        stand(item);
+        if (item) spin(true, item);
+        else actor.dance?.(null);
+      },
       scrollTo(s) {
         const vh = sections[0]?.offsetHeight || innerHeight;
         scrollTo({ top: Math.round(s) * vh, behavior: 'instant' });

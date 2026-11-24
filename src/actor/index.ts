@@ -74,6 +74,8 @@ export interface Actor {
   prepare?(file: MotionInfo): Promise<string | null>;
   /** Где сейчас песня, секунды: танец подстраивается под плеер. */
   danceAt?(seconds: number): void;
+  /** Что с музыкой в этом кадре: секунда песни и насколько танец в силе (0…1). По этому живёт шоу. */
+  music?(): { time: number; on: number };
   /** Для отладки из консоли в dev-сборке. */
   debug?: unknown;
 }
@@ -171,6 +173,7 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
   let danceLag = 0; // на сколько секунд наши часы отстали от песни
   let danceJump: number | null = null; // перемотка: куда перескочить, когда танец стихнет
   let danceRamp = 0; // 0…1, ход входа в танец
+  const music = { time: 0, on: 0 }; // то же для шоу: секунда песни и сила танца
   // Танец из файла: что просят, что идёт, и насколько файл уже взял верх над своим танцем.
   let danceFile: MotionInfo | null = null;
   let fileShown: MotionInfo | null = null;
@@ -344,6 +347,7 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
         fileShown = file;
       }
     },
+    music: () => music,
     prepare(file) {
       return fetchMotion(file).then((motion) => motion?.credit ?? null);
     },
@@ -371,6 +375,7 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
       danceJump = null;
       danceRamp = 0;
       fileRamp = 0;
+      music.time = music.on = 0;
       yaw.v = 0;
       pitch.v = 0;
       seen.ready = false;
@@ -430,6 +435,8 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
       const wantDance = danceName !== null && !other && danceJump === null && !still;
       danceRamp = clamp01(danceRamp + (wantDance ? dt : -dt) / 0.5);
       const dancing = danceRamp * danceRamp * (3 - 2 * danceRamp);
+      music.time = danceClock;
+      music.on = dancing;
       // Танец из файла, когда он загружен, идёт вместо своего.
       const motion = fileShown ? (motions.get(fileShown.url) ?? null) : null;
       let fromFile = 0;

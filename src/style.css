@@ -359,3 +359,11 @@ html[data-gfx='none'] #stage {
     max-width: 100%;
   }
 }
+
+/* Идёт шоу под музыку (fx/show.ts): текст главы уступает сцену. */
+.copy {
+  transition: opacity 0.6s ease;
+}
+:root[data-on-air] .copy {
+  opacity: 0;
+}

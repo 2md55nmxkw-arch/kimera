@@ -317,3 +317,9 @@
     font-size: 1.2rem;
   }
 }
+
+/* Идёт шоу под музыку: вещи закрыты задником, Тето танцует — остаются только пластинки. */
+:root[data-on-air] .pin:not(.is-record) {
+  opacity: 0;
+  pointer-events: none;
+}
