@@ -1,8 +1,10 @@
 // 01 · Гримёрка. Шалфейная штукатурка над тёмной деревянной панелью (зелёный
 // делает рыжие волосы ярче), зеркало в
-// лампочках и корзина багетов — любимая вещь Тето по официальной анкете.
+// лампочках, корзина багетов — любимая вещь Тето по официальной анкете — и
+// стенд с пластинками над проигрывателем: песни, где она поёт.
+import { RECORDS } from '../../content/records';
 import { merge, type Geo } from '../../model/geo';
-import { ball, box, lathe, tube } from '../../model/solids';
+import { ball, box, lathe, rod, tube } from '../../model/solids';
 import type { V3 } from '../../model/vec';
 import { mark, part, type StageSet } from '../kit';
 import { frame, planks, sheet, shelf, wallSlab } from './shared';
@@ -53,6 +55,30 @@ function baguette(from: V3, to: V3, bend: number): Geo {
   );
 }
 
+/** Диск: тело вращения, поставленное лицом в комнату. */
+const disc = (r: number, x: number, y: number, z: number, thick = 0.003): Geo =>
+  lathe(
+    [
+      [0, 0],
+      [r, 0],
+      [r, thick],
+      [0, thick],
+    ],
+    { segments: 32 },
+  )
+    .rotX(Math.PI / 2)
+    .move(x, y, z);
+
+/** Конверт пластинки 17×17 см с простым рисунком: полоса и круг. k — номер, от него зависит рисунок. */
+function sleeve(x: number, y: number, [paper, ink]: [string, string], k: number): Geo {
+  const card = box(0.17, 0.17, 0.006).move(0, -0.085, 0).tint(paper);
+  const stripe = box(0.17, 0.03, 0.002).move(0, -0.07 + (k % 3) * 0.022, 0.004).tint(ink);
+  const dot = disc(0.04, 0.035 - (k % 2) * 0.07, 0.025 - (k % 3) * 0.012, 0.0035, 0.002).tint(ink);
+  return merge(card, stripe, dot)
+    .rotZ((k % 2 ? 1 : -1) * 0.025)
+    .move(x, y, 0.05);
+}
+
 export const dressingRoom: StageSet = {
   name: 'Dressing room',
   floor: '#4b352d',
@@ -96,7 +122,8 @@ export const dressingRoom: StageSet = {
     const sx = 0.95;
 
     // Полка с корзиной багетов.
-    right.add(part(shelf(sx, 1.2, 0.5, 0.2, WOOD_DARK)));
+    const by = 1.56;
+    right.add(part(shelf(sx, by, 0.5, 0.2, WOOD_DARK)));
     const basket = lathe(
       [
         [0, 0],
@@ -108,16 +135,87 @@ export const dressingRoom: StageSet = {
       ],
       { segments: 28, wave: (theta, _i, y) => 1 + Math.sin(theta * 14 + y * 90) * 0.022 },
     )
-      .move(sx, 1.2, 0.1)
+      .move(sx, by, 0.1)
       .tint('#b08552');
     right.add(part(basket));
     const loaves = merge(
-      baguette([sx - 0.03, 1.22, 0.1], [sx - 0.12, 1.62, 0.14], 0.015),
-      baguette([sx + 0.02, 1.22, 0.09], [sx + 0.04, 1.68, 0.19], -0.012),
-      baguette([sx + 0.03, 1.22, 0.12], [sx + 0.15, 1.58, 0.1], 0.015),
+      baguette([sx - 0.03, by + 0.02, 0.1], [sx - 0.12, by + 0.38, 0.14], 0.015),
+      baguette([sx + 0.02, by + 0.02, 0.09], [sx + 0.04, by + 0.43, 0.19], -0.012),
+      baguette([sx + 0.03, by + 0.02, 0.12], [sx + 0.15, by + 0.35, 0.1], 0.015),
     );
     right.add(part(loaves));
-    mark(right, 'bread', sx, 1.48, 0.14);
+    mark(right, 'bread', sx, by + 0.24, 0.14);
+
+    // Стенд с пластинками: четыре конверта в два ряда, из верхнего левого выглядывает диск.
+    right.add(part(box(0.42, 0.44, 0.02, { bevel: 0.006 }).move(0.99, 0.985, 0.03).tint(WOOD_DARK)));
+    const spots: [number, number][] = [
+      [0.895, 1.3],
+      [1.085, 1.3],
+      [0.895, 1.105],
+      [1.085, 1.105],
+    ];
+    right.add(
+      part(
+        merge(
+          disc(0.075, spots[0][0], spots[0][1] + 0.07, 0.044, 0.003).tint('#141216'),
+          disc(0.026, spots[0][0], spots[0][1] + 0.07, 0.0475, 0.001).tint(RECORDS[0].sleeve[1]),
+        ),
+        { noShadow: true },
+      ),
+    );
+    RECORDS.forEach((record, i) => {
+      const [x, y] = spots[i] ?? spots[0];
+      right.add(part(sleeve(x, y, record.sleeve, i), { noShadow: true }));
+      mark(right, `record-${i}`, x, y, 0.06);
+    });
+
+    // Тумба с проигрывателем под стендом.
+    const tx = 0.98;
+    const top = 0.84;
+    right.add(part(box(0.62, top, 0.36, { bevel: 0.012 }).move(tx, 0, 0.2).tint(WOOD_DARK)));
+    right.add(part(box(0.42, 0.045, 0.3, { bevel: 0.008 }).move(tx - 0.02, top, 0.2).tint('#2a262c')));
+    right.add(
+      part(
+        merge(
+          lathe(
+            [
+              [0, 0],
+              [0.125, 0],
+              [0.125, 0.012],
+              [0, 0.012],
+            ],
+            { segments: 36 },
+          )
+            .move(tx - 0.06, top + 0.045, 0.2)
+            .tint('#8d8a93'),
+          lathe(
+            [
+              [0, 0],
+              [0.116, 0],
+              [0.116, 0.004],
+              [0, 0.004],
+            ],
+            { segments: 36 },
+          )
+            .move(tx - 0.06, top + 0.057, 0.2)
+            .tint('#141216'),
+          lathe(
+            [
+              [0, 0],
+              [0.04, 0],
+              [0.04, 0.0015],
+              [0, 0.0015],
+            ],
+            { segments: 24 },
+          )
+            .move(tx - 0.06, top + 0.061, 0.2)
+            .tint(RECORDS[0].sleeve[0]),
+          // Тонарм: стойка и трубка к пластинке.
+          rod([tx + 0.14, top + 0.045, 0.1], [tx + 0.14, top + 0.085, 0.1], 0.012).tint(BRASS),
+          rod([tx + 0.14, top + 0.08, 0.1], [tx + 0.03, top + 0.07, 0.25], 0.005, { sides: 6 }).tint(BRASS),
+        ),
+      ),
+    );
 
     // Низкий ящик-кофр у стены: виден только на общем плане.
     left.add(part(box(0.7, 0.42, 0.4, { bevel: 0.02 }).move(0.9, 0, 0.24).tint('#2e2a33')));

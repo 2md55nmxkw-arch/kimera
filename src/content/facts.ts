@@ -11,7 +11,7 @@
 // Японские названия остаются как в источнике; тон — короткая сухая музейная этикетка.
 
 export type Lang = 'en' | 'ru';
-export type Group = 'profile' | 'history' | 'design';
+export type Group = 'profile' | 'history' | 'design' | 'music';
 
 export interface Fact {
   id: string;
@@ -23,8 +23,10 @@ export interface Fact {
   title: Record<Lang, string>;
   /** Одно-два предложения. */
   text: Record<Lang, string>;
-  /** Страница официального сайта, с которой взят факт. */
+  /** Страница, с которой взят факт (у пластинки — адрес видео). */
   source: string;
+  /** Как показать адрес источника, если сам он слишком длинный. */
+  sourceText?: string;
 }
 
 const ABOUT = 'https://kasaneteto.jp/about/';
@@ -166,4 +168,5 @@ const BY_ID = new Map(FACTS.map((fact) => [fact.id, fact]));
 export const factById = (id: string): Fact | undefined => BY_ID.get(id);
 
 /** Адрес источника без протокола и хвостовой черты — как он пишется на этикетке. */
-export const sourceLabel = (fact: Fact): string => fact.source.replace(/^https?:\/\//, '').replace(/\/$/, '');
+export const sourceLabel = (fact: Fact): string =>
+  fact.sourceText ?? fact.source.replace(/^https?:\/\//, '').replace(/\/$/, '');

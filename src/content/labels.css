@@ -118,6 +118,36 @@
   margin: 0;
   font: 400 0.72rem / 1.5 var(--mono);
 }
+.card-action {
+  display: block;
+  margin-top: 0.7rem;
+  padding: 0.6em 0.9em;
+  border: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font: 500 0.62rem / 1 var(--mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 3px 3px 0 var(--pink);
+}
+.card-action:hover {
+  background: #d51f4f;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+.card-action[hidden] {
+  display: none;
+}
+/* Булавка пластинки — нота на чёрном, чтобы отличалась от фактов. */
+.pin.is-record {
+  background: var(--ink);
+  color: var(--pink);
+  font-size: 0.8rem;
+}
+.pin.is-record.is-found {
+  background: var(--paper);
+  color: var(--ink);
+}
 .card-source {
   display: inline-block;
   margin-top: 0.6rem;

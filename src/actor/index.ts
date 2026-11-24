@@ -60,6 +60,8 @@ export interface Actor {
   memory?: Memory;
   /** Вернуть всё к состоянию сразу после загрузки: инерцию, моргание, реакции, волосы. */
   reset?(): void;
+  /** Играет музыка: она слушает — улыбается и покачивает головой. */
+  listen?(on: boolean): void;
   /** Для отладки из консоли в dev-сборке. */
   debug?: unknown;
 }
@@ -144,6 +146,8 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
 
   // ── мелкая жизнь, память, ветер ───────────────────────────────────────
   const life = createLife();
+  let wantListen = false;
+  let listening = 0; // 0…1, плавно
   const memory = createMemory();
   // Гладили в прошлый раз — машет, доводили — косится. Сброс (reset) приветствие отменяет.
   life.greet(memory.standing === 'kind' ? 'wave' : memory.standing === 'wary' ? 'wary' : null);
@@ -275,7 +279,12 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
     wind(direction, strength) {
       wind?.set(direction, strength);
     },
+    listen(on) {
+      wantListen = on;
+    },
     reset() {
+      wantListen = false;
+      listening = 0;
       yaw.v = 0;
       pitch.v = 0;
       seen.ready = false;
@@ -310,6 +319,15 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
         face: zones.face.pos,
         hands,
       });
+      // Играет музыка: слушает — улыбка, голова покачивается, лёгкий подскок в такт.
+      // Настоящего такта страница не знает (плеер чужой), поэтому темп спокойный и общий.
+      listening += ((wantListen && !still ? 1 : 0) - listening) * (1 - Math.exp(-dt * 2.5));
+      if (listening > 0.002) {
+        const beat = t * 3.4;
+        live.happy = Math.max(live.happy, 0.55 * listening);
+        live.headRoll += Math.sin(beat) * 0.055 * listening;
+        live.bob += Math.abs(Math.sin(beat)) * 0.007 * listening;
+      }
       // Обиделась — на курсор не смотрит; заскучала — следит вполглаза.
       const attend = (1 - react.ignore) * live.attend;
       if (head) head.getWorldPosition(headPos);

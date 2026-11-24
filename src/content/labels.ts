@@ -40,6 +40,8 @@ interface Entry {
   /** С какой стороны от точки ставить подпись: градусы, 0 — справа, 90 — сверху. */
   side: number;
   el: HTMLElement;
+  /** Кнопка в этикетке (у пластинки — «слушать»). */
+  action: (() => void) | null;
   /** Для пометки от руки: стрелка и то, где стоит текст. */
   path: SVGPathElement | null;
   x: number;
@@ -52,6 +54,11 @@ interface Entry {
 export interface Labels extends Part {
   /** Привязать факт к точке в мире. Функция вызывается каждый кадр; null — точки сейчас нет. */
   anchor(factId: string, at: () => THREE.Vector3 | null, side?: number): void;
+  /**
+   * То же для записи, которой нет среди фактов (пластинка), с кнопкой в этикетке.
+   * @param action что сделать по кнопке
+   */
+  anchorItem(item: Fact, at: () => THREE.Vector3 | null, side: number, action: () => void): void;
   /**
    * Привязать факт к месту на экране, пиксели.
    * @param pointer рисовать ли стрелку (пометке-подписи на полях она не нужна)
@@ -103,6 +110,9 @@ export function createLabels(camera: THREE.PerspectiveCamera, head: () => Head):
   const cardKicker = el('p', 'card-kicker', card);
   const cardTitle = el('h3', 'card-title', card);
   const cardText = el('p', 'card-text', card);
+  const cardAction = el('button', 'card-action', card);
+  cardAction.type = 'button';
+  cardAction.hidden = true;
   const cardSource = el('a', 'card-source', card);
   cardSource.target = '_blank';
   cardSource.rel = 'noopener noreferrer';
@@ -125,8 +135,11 @@ export function createLabels(camera: THREE.PerspectiveCamera, head: () => Head):
   let open: Entry | null = null;
   let boil = -1;
 
+  // Номер — среди своих: у фактов главы свой счёт, у пластинок свой.
   const numberOf = (entry: Entry) =>
-    entries.filter((e) => e.fact.chapter === entry.fact.chapter).indexOf(entry) + 1;
+    entries
+      .filter((e) => e.fact.chapter === entry.fact.chapter && (e.fact.group === 'music') === (entry.fact.group === 'music'))
+      .indexOf(entry) + 1;
 
   function count() {
     if (!counter) return;
@@ -179,6 +192,8 @@ export function createLabels(camera: THREE.PerspectiveCamera, head: () => Head):
     write(cardKicker, `${t(`group.${fact.group}`)} · ${fact.when ?? String(numberOf(entry)).padStart(2, '0')}`);
     write(cardTitle, pick(fact.title));
     write(cardText, pick(fact.text));
+    cardAction.hidden = !entry.action;
+    if (entry.action) cardAction.textContent = t('record.play');
     cardSource.href = fact.source;
     cardSource.textContent = sourceLabel(fact);
     mark(entry);
@@ -253,9 +268,23 @@ export function createLabels(camera: THREE.PerspectiveCamera, head: () => Head):
     entry.path.setAttribute('d', len > 24 ? arrow([fromX - nx, fromY - ny], [tipX - nx, tipY - ny], seed) : '');
   }
 
-  function add(factId: string, where: Where, side: number, pointer = true) {
+  const need = (factId: string): Fact => {
     const fact = factById(factId);
     if (!fact) throw new Error(`нет факта «${factId}» в content/facts.ts`);
+    return fact;
+  };
+  /** Точка в мире → точка на экране. */
+  const onScreen =
+    (at: () => THREE.Vector3 | null): Where =>
+    () => {
+      const world = at();
+      if (!world) return null;
+      projected.copy(world).project(camera);
+      if (projected.z > 1) return null; // точка за камерой
+      return { x: ((projected.x + 1) / 2) * innerWidth, y: ((1 - projected.y) / 2) * innerHeight };
+    };
+
+  function add(fact: Fact, where: Where, side: number, pointer = true, action: (() => void) | null = null) {
     const note = fact.group === 'design';
     const node = el(note ? 'div' : 'button', note ? 'note' : 'pin', layer);
     let path: SVGPathElement | null = null;
@@ -271,9 +300,11 @@ export function createLabels(camera: THREE.PerspectiveCamera, head: () => Head):
         node.append(svg);
       }
     }
-    const entry: Entry = { fact, where, side, el: node, path, x: -1e4, y: -1e4, noteX: -1e4, noteY: -1e4, on: false };
+    const entry: Entry = { fact, where, side, el: node, action, path, x: -1e4, y: -1e4, noteX: -1e4, noteY: -1e4, on: false };
     entries.push(entry);
-    if (!note) node.textContent = String(numberOf(entry));
+    // У пластинки вместо номера нота: это не факт, а то, что можно послушать.
+    if (!note) node.textContent = fact.group === 'music' ? '♪' : String(numberOf(entry));
+    if (fact.group === 'music') node.classList.add('is-record');
     if (found.has(fact.id)) node.classList.add('is-found');
 
     const refresh = () => showCard(pinned ?? hover ?? focus);
@@ -322,6 +353,14 @@ export function createLabels(camera: THREE.PerspectiveCamera, head: () => Head):
     showCard(hover ?? focus);
   });
   for (const type of ['pointerdown', 'pointerup'] as const) card.addEventListener(type, (e) => e.stopPropagation());
+  cardAction.addEventListener('click', () => {
+    const run = open?.action;
+    // Этикетка своё дело сделала: дальше работает то, что она запустила.
+    pinned = null;
+    hover = null;
+    showCard(null);
+    run?.();
+  });
   addEventListener('resize', placeCard);
 
   let sure = 0;
@@ -354,20 +393,13 @@ export function createLabels(camera: THREE.PerspectiveCamera, head: () => Head):
 
   return {
     anchor(factId, at, side = 0) {
-      add(
-        factId,
-        () => {
-          const world = at();
-          if (!world) return null;
-          projected.copy(world).project(camera);
-          if (projected.z > 1) return null; // точка за камерой
-          return { x: ((projected.x + 1) / 2) * innerWidth, y: ((1 - projected.y) / 2) * innerHeight };
-        },
-        side,
-      );
+      add(need(factId), onScreen(at), side);
+    },
+    anchorItem(item, at, side, action) {
+      add(item, onScreen(at), side, true, action);
     },
     anchorOnScreen(factId, at, side = 0, pointer = true) {
-      add(factId, at, side, pointer);
+      add(need(factId), at, side, pointer);
     },
     reset() {
       pinned = null;

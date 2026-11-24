@@ -11,6 +11,8 @@ import * as THREE from 'three/webgpu';
 import { loadActor } from './actor';
 import { bindLangSwitch, say, type Key } from './content/i18n';
 import { createLabels } from './content/labels';
+import { createPlayer } from './content/player';
+import { RECORDS } from './content/records';
 import type { Rig } from './core/capture';
 import { chapterAt, lensRadius } from './core/chapters';
 import type { Frame, Part, StepEnv } from './core/contracts';
@@ -130,6 +132,12 @@ async function boot() {
   labels.anchor('profile.sheet', at('mirror'), -90);
   labels.anchor('profile.phrase', at('note'), -60);
   labels.anchor('profile.bread', at('bread'), 180);
+  // Пластинки: этикетка с кнопкой «слушать», по ней открывается плеер. Пока играет
+  // музыка, Тето слушает.
+  const player = createPlayer((playing) => actor.listen?.(playing));
+  RECORDS.forEach((record, i) => {
+    labels.anchorItem(record.fact, at(`record-${i}`), 180, () => player.play(record));
+  });
   // Мастерская: двенадцать эпизодов истории — двенадцать лепестков розы вокруг головы.
   const HISTORY = ['proposal', 'hoax', 'utau', 'fame', 'twindrill', 'piapro', 'day', 'disc', 'decade', 'synthv', 'voices', 'eighteen'];
   HISTORY.forEach((id, k) => {
