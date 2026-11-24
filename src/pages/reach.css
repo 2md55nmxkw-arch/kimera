@@ -1,0 +1,254 @@
+/* Занавес: заключительная секция. Тёмный зал, две руки Тето тянутся друг к другу,
+   между ними печать — ссылка на программку. Секция непрозрачна и закрывает сцену
+   целиком; пока она на экране, сцена под ней не считается (см. main.ts). */
+
+.reach {
+  position: relative;
+  z-index: 4;
+  height: 100svh;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  justify-items: center;
+  padding: clamp(2.8rem, 10vh, 6rem) var(--pad) clamp(1.3rem, 4vh, 2.4rem);
+  overflow: clip;
+  background: radial-gradient(62% 52% at 50% 60%, #18171d 0%, #0a0a0b 72%);
+  color: var(--paper);
+  view-timeline: --reach block;
+  /* Куда смотрит указатель: −0.5…0.5 от середины секции (ставит pages/reach.ts). */
+  --mx: 0;
+  --my: 0;
+}
+
+.reach-kicker {
+  margin: 0 0 1.1rem;
+  padding: 0.55em 1.1em;
+  border-radius: 99px;
+  background: rgb(255 255 255 / 0.07);
+  color: rgb(255 255 255 / 0.62);
+  font: 400 0.58rem / 1 var(--mono);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.reach-title {
+  max-width: 15ch;
+  margin: 0;
+  font: italic 400 clamp(2.1rem, 5.6vw, 4.8rem) / 0.98 var(--serif);
+  letter-spacing: -0.01em;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.reach-stage {
+  position: relative;
+  align-self: stretch;
+  justify-self: stretch;
+  /* Руки выходят за края секции — отступы им не указ. */
+  margin: 0 calc(var(--pad) * -1);
+}
+
+/* ── руки ──────────────────────────────────────────────────────────────── */
+
+.reach-hand {
+  position: absolute;
+  top: 50%;
+  width: min(54vw, 62rem);
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  /* Светлые и бесцветные, как гипсовый слепок под софитом. */
+  filter: grayscale(1) brightness(1.16) drop-shadow(0 0 30px rgb(255 255 255 / 0.13));
+  /* Три независимых движения — три свойства: translate ведёт прокрутка, transform
+     слушает указатель, rotate — медленное покачивание. */
+  transform: translate3d(calc(var(--mx) * var(--lean) * 1px), calc(var(--my) * 14px), 0);
+}
+.reach-left {
+  left: 0;
+  --lean: 22;
+  translate: 7% -30%;
+  transform-origin: 0 50%;
+  /* К локтю рука уходит в темноту. */
+  mask-image: linear-gradient(90deg, transparent 5%, #000 44%);
+}
+.reach-right {
+  right: 0;
+  --lean: 16;
+  translate: -7% -40%;
+  transform-origin: 100% 50%;
+  mask-image: linear-gradient(270deg, transparent 5%, #000 44%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reach-left {
+    animation: reach-sway 7.5s ease-in-out infinite alternate;
+  }
+  .reach-right {
+    animation: reach-sway 9s ease-in-out -3s infinite alternate-reverse;
+  }
+
+  /* Пока секция въезжает на экран, руки сходятся. Где браузер не умеет привязывать
+     анимацию к прокрутке, они просто стоят на месте. */
+  @supports (animation-timeline: view()) {
+    .reach-left {
+      animation:
+        reach-sway 7.5s ease-in-out infinite alternate,
+        reach-in-left linear both;
+      animation-timeline: auto, --reach;
+      animation-range:
+        normal,
+        entry 10% cover 50%;
+    }
+    .reach-right {
+      animation:
+        reach-sway 9s ease-in-out -3s infinite alternate-reverse,
+        reach-in-right linear both;
+      animation-timeline: auto, --reach;
+      animation-range:
+        normal,
+        entry 10% cover 50%;
+    }
+    .reach-seal {
+      animation: reach-seal linear both;
+      animation-timeline: --reach;
+      animation-range: entry 40% cover 50%;
+    }
+  }
+}
+
+@keyframes reach-sway {
+  from {
+    rotate: -0.7deg;
+  }
+  to {
+    rotate: 0.9deg;
+  }
+}
+@keyframes reach-in-left {
+  from {
+    translate: -26% -30%;
+  }
+  to {
+    translate: 7% -30%;
+  }
+}
+@keyframes reach-in-right {
+  from {
+    translate: 26% -40%;
+  }
+  to {
+    translate: -7% -40%;
+  }
+}
+@keyframes reach-seal {
+  from {
+    opacity: 0;
+    scale: 0.7;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+/* ── печать ────────────────────────────────────────────────────────────── */
+
+.reach-seal {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: clamp(5.8rem, 11vw, 9.2rem);
+  aspect-ratio: 1;
+  translate: -50% -52%;
+  transform: translate3d(calc(var(--mx) * -10px), calc(var(--my) * -8px), 0);
+  border-radius: 50%;
+  transition: scale 0.35s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.reach-seal:hover,
+.reach-seal:focus-visible {
+  scale: 1.08;
+  outline: none;
+}
+.reach-seal:focus-visible {
+  box-shadow: 0 0 0 2px var(--pink);
+}
+.reach-seal svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.seal-edge {
+  fill: #0d0d0f;
+  stroke: rgb(255 255 255 / 0.5);
+  stroke-width: 0.7;
+}
+.seal-ring {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.22);
+  stroke-width: 0.5;
+}
+.seal-text {
+  fill: rgb(255 255 255 / 0.78);
+  font: 500 5px var(--mono);
+  letter-spacing: 0.05em;
+  transform-box: view-box;
+  transform-origin: 50% 50%;
+}
+.seal-core {
+  fill: var(--pink);
+  filter: drop-shadow(0 0 5px rgb(255 59 107 / 0.55));
+}
+/* Тёмный круг со сдвигом превращает ядро в серп. */
+.seal-moon {
+  fill: #0d0d0f;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .seal-text {
+    animation: seal-spin 46s linear infinite;
+  }
+}
+@keyframes seal-spin {
+  to {
+    rotate: 1turn;
+  }
+}
+
+.reach-foot {
+  margin: 0;
+  color: rgb(255 255 255 / 0.45);
+  font: 400 0.6rem / 1.4 var(--mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+/* На узком экране руки крупнее и расходятся по вертикали: одна сверху, другая снизу. */
+@media (max-aspect-ratio: 1 / 1) {
+  .reach-hand {
+    width: 92vw;
+  }
+  .reach-left {
+    translate: -24% -92%;
+  }
+  .reach-right {
+    translate: 24% 4%;
+  }
+  @keyframes reach-in-left {
+    from {
+      translate: -60% -92%;
+    }
+    to {
+      translate: -24% -92%;
+    }
+  }
+  @keyframes reach-in-right {
+    from {
+      translate: 60% 4%;
+    }
+    to {
+      translate: 24% 4%;
+    }
+  }
+}

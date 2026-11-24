@@ -5,6 +5,7 @@ import '@fontsource/dela-gothic-one';
 import '@fontsource/instrument-serif/400-italic.css';
 import '@fontsource-variable/martian-mono';
 import './style.css';
+import './pages/reach';
 
 import * as THREE from 'three/webgpu';
 import { loadActor } from './actor';
@@ -98,7 +99,11 @@ async function boot() {
     if (zone) trail.splash(x, y);
     for (const part of parts) part.poke?.({ x, y, zone });
   };
-  const input = createInput((clientX, clientY) => tap(clientX / innerWidth, clientY / innerHeight));
+  /** Экран целиком закрыт занавесом (последняя секция): сцену под ним не трогаем. */
+  const curtained = () => scrollY >= COUNT * (sections[0]?.offsetHeight || innerHeight) - 2;
+  const input = createInput((clientX, clientY) => {
+    if (!curtained()) tap(clientX / innerWidth, clientY / innerHeight);
+  });
   const pointer = input.pointer;
 
   // Ручки для отладки из консоли dev-сборки: своя камера и остановка хода наброска.
@@ -270,6 +275,11 @@ async function boot() {
   let last = performance.now();
   const frame = () => {
     const now = performance.now();
+    if (curtained()) {
+      // Под занавесом сцену не видно: не считаем и не рисуем, время для неё стоит.
+      last = now;
+      return;
+    }
     // Не успеваем — рисуем мельче, стало легче — возвращаемся (core/quality.ts).
     if (quality.measure(now - last, now)) resize();
     const dt = Math.min((now - last) / 1000, 0.05);

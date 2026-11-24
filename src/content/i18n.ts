@@ -45,6 +45,11 @@ const EN = {
   'hud.tools': 'Labels, language, programme',
   'hud.programme': 'programme',
 
+  'reach.kicker': 'curtain',
+  'reach.title': 'Touch the glass. She knocks back.',
+  'reach.link': 'Read the programme',
+  'reach.foot': 'A fan work. Unsigned.',
+
   'group.profile': 'Profile',
   'group.history': 'History',
   'group.design': 'Design sheet',
@@ -89,6 +94,11 @@ const RU: Record<Key, string> = {
   'hud.lang': 'Язык',
   'hud.tools': 'Этикетки, язык, программка',
   'hud.programme': 'программка',
+
+  'reach.kicker': 'занавес',
+  'reach.title': 'Тронь стекло — она постучит в ответ.',
+  'reach.link': 'Открыть программку',
+  'reach.foot': 'Фанатская работа. Без подписи.',
 
   'group.profile': 'Анкета',
   'group.history': 'История',
