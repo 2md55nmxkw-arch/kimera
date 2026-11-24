@@ -136,8 +136,12 @@ async function boot() {
   // Что плеер знает о музыке, то и передаём Тето: стоит пластинка — слушает,
   // музыка идёт — танцует танец этой песни в её темпе, пауза — замирает.
   const player = createPlayer({
-    onRecord: (item) => actor.listen?.(item !== null),
-    onPlaying: (playing, item) => actor.dance?.(playing ? item.dance : null, item.tempo),
+    onRecord: (item) => {
+      actor.listen?.(item !== null);
+      // Танец из файла грузим заранее; есть файл — в плеере появится подпись автора движения.
+      if (item?.motion) void actor.prepare?.(item.motion).then((credit) => player.credit(item, credit));
+    },
+    onPlaying: (playing, item) => actor.dance?.(playing ? item.dance : null, item.tempo, item.motion ?? null),
     onTime: (seconds) => actor.danceAt?.(seconds),
   });
   RECORDS.forEach((record, i) => {

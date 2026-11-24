@@ -15,6 +15,8 @@ import type { RecordItem } from './records';
 export interface Player {
   play(item: RecordItem): void;
   stop(): void;
+  /** Подпись автора танца для пластинки item (null — убрать). */
+  credit(item: RecordItem, text: string | null): void;
 }
 
 export interface PlayerEvents {
@@ -36,6 +38,7 @@ export function createPlayer(events: PlayerEvents): Player {
   let heard = false; // плеер прислал хоть одно сообщение
   let knock = 0;
   let giveUp = 0;
+  let dance: string | null = null; // чьё движение танцует Тето под эту пластинку
 
   function setPlaying(next: boolean) {
     if (next === playing || !current) return;
@@ -80,6 +83,9 @@ export function createPlayer(events: PlayerEvents): Player {
     close.title = t('player.close');
     panel.querySelector('.player-from')!.textContent = t('player.from');
     panel.querySelector<HTMLAnchorElement>('.player-open')!.textContent = t('player.open');
+    const by = panel.querySelector<HTMLElement>('.player-dance')!;
+    by.hidden = !dance;
+    by.textContent = dance ? `${t('player.dance')} · ${dance}` : '';
   }
   onLang(labels);
 
@@ -89,8 +95,14 @@ export function createPlayer(events: PlayerEvents): Player {
 
   return {
     stop,
+    credit(item, text) {
+      if (item !== current) return;
+      dance = text;
+      labels();
+    },
     play(item) {
       stop();
+      dance = null;
       current = item;
       playing = false;
       heard = false;
@@ -103,7 +115,8 @@ export function createPlayer(events: PlayerEvents): Player {
           <button class="player-close" type="button">×</button>
         </header>
         <div class="player-frame"></div>
-        <p class="player-foot"><span class="player-from"></span> · <a class="player-open" target="_blank" rel="noopener noreferrer"></a></p>`;
+        <p class="player-foot"><span class="player-from"></span> · <a class="player-open" target="_blank" rel="noopener noreferrer"></a></p>
+        <p class="player-foot player-dance" hidden></p>`;
       panel.querySelector<HTMLAnchorElement>('.player-open')!.href = item.fact.source;
 
       const box = document.createElement('iframe');

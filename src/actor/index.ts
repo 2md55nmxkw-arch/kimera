@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MToonMaterialLoaderPlugin, VRMLoaderPlugin, VRMUtils, type VRM } from '@pixiv/three-vrm';
 import { MToonNodeMaterial } from '@pixiv/three-vrm/nodes';
 import { applyDance, type DanceName } from './dance';
+import { loadMotion, type Motion, type MotionInfo } from './motion';
 import { createLife, type IdleName } from './life';
 import { createMemory, type Memory } from './memory';
 import { markBodyParts } from './parts';
@@ -66,8 +67,11 @@ export interface Actor {
   /**
    * Танцевать (actor/dance.ts) или перестать (null).
    * @param tempo движений в минуту
+   * @param file  танец из файла (actor/motion.ts): там, где он есть, идёт вместо своего
    */
-  dance?(name: DanceName | null, tempo?: number): void;
+  dance?(name: DanceName | null, tempo?: number, file?: MotionInfo | null): void;
+  /** Заранее загрузить танец из файла. Отдаёт подпись автора движения или null, если файла нет. */
+  prepare?(file: MotionInfo): Promise<string | null>;
   /** Где сейчас песня, секунды: танец подстраивается под плеер. */
   danceAt?(seconds: number): void;
   /** Для отладки из консоли в dev-сборке. */
@@ -167,6 +171,23 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
   let danceLag = 0; // на сколько секунд наши часы отстали от песни
   let danceJump: number | null = null; // перемотка: куда перескочить, когда танец стихнет
   let danceRamp = 0; // 0…1, ход входа в танец
+  // Танец из файла: что просят, что идёт, и насколько файл уже взял верх над своим танцем.
+  let danceFile: MotionInfo | null = null;
+  let fileShown: MotionInfo | null = null;
+  let fileRamp = 0;
+  const motions = new Map<string, Motion | null>();
+  const loading = new Map<string, Promise<Motion | null>>();
+  const fetchMotion = (file: MotionInfo): Promise<Motion | null> => {
+    let job = loading.get(file.url);
+    if (!job) {
+      job = (poser ? loadMotion(file.url, vrm, poser) : Promise.resolve(null)).then((motion) => {
+        motions.set(file.url, motion);
+        return motion;
+      });
+      loading.set(file.url, job);
+    }
+    return job;
+  };
   const memory = createMemory();
   // Гладили в прошлый раз — машет, доводили — косится. Сброс (reset) приветствие отменяет.
   life.greet(memory.standing === 'kind' ? 'wave' : memory.standing === 'wary' ? 'wary' : null);
@@ -272,7 +293,17 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
     points,
     memory,
     onKnock: null,
-    debug: { vrm, lookTarget, poser, reactor, zones, life, wind },
+    debug: {
+      vrm,
+      lookTarget,
+      poser,
+      reactor,
+      zones,
+      life,
+      wind,
+      /** Что сейчас с танцем: для проверки связи с плеером. */
+      dance: () => ({ asked: danceName, shown: danceShown, clock: danceClock, lag: danceLag, jump: danceJump, ramp: danceRamp, file: fileShown ? motions.get(fileShown.url) != null : false, fileRamp }),
+    },
     hit(ndcX, ndcY, camera) {
       return find(ndcX, ndcY, camera)?.zone ?? null;
     },
@@ -301,16 +332,31 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
     listen(on) {
       wantListen = on;
     },
-    dance(name, tempo = 96) {
+    dance(name, tempo = 96, file = null) {
       danceName = name;
       danceTempo = tempo;
-      if (name === danceShown) tempoShown = tempo;
+      if (name) {
+        danceFile = file;
+        if (file) void fetchMotion(file);
+      }
+      if (name === danceShown) {
+        tempoShown = tempo;
+        fileShown = file;
+      }
+    },
+    prepare(file) {
+      return fetchMotion(file).then((motion) => motion?.credit ?? null);
     },
     danceAt(seconds) {
       // Плеер сообщает время песни несколько раз в секунду. Мелкое расхождение
       // выбираем понемногу, чуть ускоряя или замедляя свои часы; крупное — перемотка.
       const off = seconds - danceClock;
-      if (Math.abs(off) > 1) danceJump = seconds;
+      if (danceRamp < 0.25) {
+        // Танца ещё почти не видно: ставим часы сразу, без подстройки.
+        danceClock = seconds;
+        danceJump = null;
+        danceLag = 0;
+      } else if (Math.abs(off) > 1.5) danceJump = seconds;
       else {
         danceJump = null;
         danceLag = off;
@@ -324,6 +370,7 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
       danceLag = 0;
       danceJump = null;
       danceRamp = 0;
+      fileRamp = 0;
       yaw.v = 0;
       pitch.v = 0;
       seen.ready = false;
@@ -364,6 +411,8 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
         if (other) {
           danceShown = danceName!;
           tempoShown = danceTempo;
+          fileShown = danceFile;
+          fileRamp = 0;
           danceClock = 0;
         }
         if (danceJump !== null) danceClock = danceJump;
@@ -371,14 +420,30 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
         danceLag = 0;
       }
       if (danceName) {
-        const fix = Math.min(0.15, Math.max(-0.15, danceLag * 2)) * dt;
+        // Мелкое расхождение с песней выбираем незаметно, чуть меняя ход часов. Крупное
+        // (кадры идут редко, страница подвисла) — быстро: отстать от музыки хуже.
+        const gentle = Math.min(0.15, Math.max(-0.15, danceLag * 2)) * dt;
+        const fix = Math.abs(danceLag) > 0.25 ? danceLag * Math.min(1, dt * 5) : gentle;
         danceClock += dt + fix;
         danceLag -= fix;
       }
       const wantDance = danceName !== null && !other && danceJump === null && !still;
       danceRamp = clamp01(danceRamp + (wantDance ? dt : -dt) / 0.5);
       const dancing = danceRamp * danceRamp * (3 - 2 * danceRamp);
-      if (dancing > 0.002) applyDance(danceShown, (danceClock * tempoShown) / 60, dancing, live);
+      // Танец из файла, когда он загружен, идёт вместо своего.
+      const motion = fileShown ? (motions.get(fileShown.url) ?? null) : null;
+      let fromFile = 0;
+      if (motion && fileShown && danceName !== null) fileRamp = clamp01(fileRamp + dt / 0.4);
+      if (!motion) fileRamp = 0;
+      if (motion && fileShown) fromFile = fileRamp * fileRamp * (3 - 2 * fileRamp);
+      const own = dancing * (1 - fromFile);
+      const filed = dancing * fromFile;
+      if (own > 0.002) applyDance(danceShown, (danceClock * tempoShown) / 60, own, live);
+      if (filed > 0.002) {
+        // Лицо и внимание в танце из файла — его собственные.
+        live.calm = Math.max(live.calm, filed);
+        live.attend *= 1 - filed;
+      }
       listening += ((wantListen && !still ? 1 : 0) - listening) * (1 - Math.exp(-dt * 2.5));
       // Слушает, когда музыка открыта, но не танцует (пауза, загрузка).
       if (listening * (1 - dancing) > 0.002) {
@@ -436,6 +501,8 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
       const hp = pitch.v - bodyLean + react.headPitch + live.headPitch;
       if (neck) neck.rotation.set(flip * hp * 0.35, hy * 0.35, flip * tilt * 0.4);
       if (head) head.rotation.set(flip * hp * 0.65, hy * 0.65, flip * (tilt * 0.6 - hy * 0.08));
+      // Танец из файла ставит кости поверх всего, что тело уже решило.
+      if (motion && fileShown && filed > 0.002) motion.apply(fileShown.clips, danceClock, filed);
       if (vrm.lookAt) {
         // lookAt() считает угол до цели относительно головы. В модели этот угол
         // ослаблен: 90° на входе дают всего 8–12° поворота зрачка, поэтому усиливаем.
@@ -466,6 +533,7 @@ async function loadVRM(url: string, onProgress?: (loaded: number) => void): Prom
         em.setValue('sad', clamp01(live.sad) * own * calm);
         em.setValue('aa', clamp01(live.mouth) * own);
         em.setValue('Surprised', surprised);
+        if (motion && filed > 0.002) motion.face(filed);
       }
 
       // Ветер и рывки локонов — это настройки пружинных костей, их надо выставить до шага.

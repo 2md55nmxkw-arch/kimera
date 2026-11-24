@@ -32,6 +32,8 @@ export interface ProgrammeCopy {
     model: string;
     modelNote: string;
     modelBy: string;
+    dance: string;
+    danceNote: string;
     rights: string;
     staging: string;
     unsigned: string;
@@ -88,6 +90,8 @@ export const programmeCopy: Record<Lang, ProgrammeCopy> = {
       model: '3-D model',
       modelNote: 'free VRM',
       modelBy: 'by',
+      dance: 'Dance',
+      danceNote: 'for Mesmerizer',
       rights: 'Rights',
       staging: 'Staging',
       unsigned: 'unsigned',
@@ -160,6 +164,8 @@ export const programmeCopy: Record<Lang, ProgrammeCopy> = {
       model: '3D-модель',
       modelNote: 'бесплатная VRM',
       modelBy: 'автор —',
+      dance: 'Танец',
+      danceNote: 'под Mesmerizer',
       rights: 'Права',
       staging: 'Постановка',
       unsigned: 'без подписи',

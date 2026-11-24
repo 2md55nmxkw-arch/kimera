@@ -195,6 +195,33 @@ export interface Poser {
   ): Pose;
   /** Сбросить инерцию рук и пальцев: следующая поза встанет сразу. */
   reset(): void;
+  /**
+   * Переставить ноги под таз, который сдвинули уже после update (танец из файла).
+   * Без точек ступни остаются где стояли; с точками — идут в них с весом w.
+   */
+  plant(goals?: [FootGoal, FootGoal]): void;
+  /** Исходная стойка, мир: по ней пересчитываются повороты и сдвиги из файла. */
+  rest: {
+    /** Ориентация костей в исходной стойке. */
+    q0: THREE.Quaternion;
+    /** Таз: в координатах родителя и в мире. */
+    hipsLocal: THREE.Vector3;
+    hips: THREE.Vector3;
+    /** Ступни: [левая, правая]. */
+    ankles: [THREE.Vector3, THREE.Vector3];
+    /** Длина ноги от бедра до ступни. */
+    leg: number;
+  };
+}
+
+/** Куда поставить ступню. */
+export interface FootGoal {
+  /** Точка, мир. */
+  pos: THREE.Vector3;
+  /** Поворот ступни от исходного, мир. */
+  rot: THREE.Quaternion;
+  /** 0…1: насколько точка заменяет место, где ступня стояла. */
+  w: number;
 }
 
 /** Пружина: значение догоняет цель с небольшим проскоком. */
@@ -367,29 +394,40 @@ export function createPoser(vrm: VRM): Poser | null {
   const qRide = new THREE.Quaternion(); // на сколько грудь повёрнута относительно покоя, мир
   const ribs = upperChest ?? chest ?? spine;
 
-  function solveLeg(leg: LegRig) {
+  const qGoal = new THREE.Quaternion();
+  const qLean = new THREE.Quaternion();
+
+  function solveLeg(leg: LegRig, goal?: FootGoal) {
     const { side, upper, lower, foot } = leg;
+    const w = goal?.w ?? 0;
     upper.getWorldPosition(S);
     T.copy(leg.ankle).add(stride);
+    if (goal && w > 0.001) T.lerp(goal.pos, w);
     dir.copy(T).sub(S);
     const len = clamp(dir.length(), Math.abs(leg.l1 - leg.l2) + 0.02, (leg.l1 + leg.l2) * 0.9995);
     dir.normalize();
     const cosA = clamp((leg.l1 * leg.l1 + len * len - leg.l2 * leg.l2) / (2 * leg.l1 * len), -1, 1);
     const sinA = Math.sqrt(1 - cosA * cosA);
-    // Колено смотрит на зрителя и чуть наружу.
+    // Колено смотрит на зрителя и чуть наружу; ступню повернули — колено идёт за ней,
+    // развернулся таз — и за ним тоже: берём середину между ними.
+    hips!.getWorldQuaternion(qParent);
+    qGoal.identity();
+    if (goal && w > 0.001) qGoal.slerp(goal.rot, w);
     pole.set(0.14 * side, 0, 1);
-    pole.addScaledVector(dir, -pole.dot(dir)).normalize();
+    if (goal && w > 0.001) pole.applyQuaternion(qLean.copy(qParent).multiply(q0inv).slerp(qGoal, 0.5));
+    pole.addScaledVector(dir, -pole.dot(dir));
+    if (pole.lengthSq() < 1e-6) pole.set(0, 0, 1).addScaledVector(dir, -dir.z);
+    pole.normalize();
     E.copy(S).addScaledVector(dir, leg.l1 * cosA).addScaledVector(pole, leg.l1 * sinA);
     uDir.copy(E).sub(S).normalize();
     lDir.copy(S).addScaledVector(dir, len).sub(E).normalize();
 
-    hips!.getWorldQuaternion(qParent);
     qU.setFromUnitVectors(leg.down, uDir).multiply(q0);
     qL.setFromUnitVectors(uDir, lDir).multiply(qU);
     upper.quaternion.copy(qParent).invert().multiply(qU);
     lower.quaternion.copy(qU).invert().multiply(qL);
-    // Ступня остаётся повёрнутой так, как стояла.
-    foot.quaternion.copy(qL).invert().multiply(q0);
+    // Ступня остаётся повёрнутой так, как стояла, либо так, как велит точка.
+    foot.quaternion.copy(qL).invert().multiply(qGoal).multiply(q0);
   }
 
   function solveArm(
@@ -557,8 +595,22 @@ export function createPoser(vrm: VRM): Poser | null {
     setEuler(d, 0, 0.05 + tc * 0.6, 0, side);
   }
 
+  hips.updateMatrixWorld(true);
+  const restAnkle = (side: 1 | -1) => legs.find((l) => l.side === side)?.ankle.clone() ?? new THREE.Vector3(0.08 * side, 0.08, 0);
+
   return {
     poses: POSES,
+    rest: {
+      q0: q0.clone(),
+      hipsLocal: hipsRest.clone(),
+      hips: hips.getWorldPosition(new THREE.Vector3()),
+      ankles: [restAnkle(1), restAnkle(-1)],
+      leg: legs[0] ? legs[0].l1 + legs[0].l2 : 0.75,
+    },
+    plant(goals) {
+      hips.updateMatrixWorld(true);
+      for (const leg of legs) solveLeg(leg, goals?.[leg.side === 1 ? 0 : 1]);
+    },
     reset() {
       for (const rig of arms) {
         rig.ready = false;

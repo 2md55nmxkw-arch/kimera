@@ -66,6 +66,10 @@
 .player-foot a {
   color: inherit;
 }
+.player-dance {
+  padding-top: 0;
+  color: var(--pink);
+}
 .player-foot a:hover {
   color: var(--pink);
 }

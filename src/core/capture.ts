@@ -56,6 +56,8 @@ export interface Shot {
   frames?: number;
   /** Вызывается перед каждым шагом: двигать указатель, запускать реакции. */
   each?(rig: Rig, frame: number, frames: number): void;
+  /** Дождаться чего-то до съёмки: например, загрузки танца из файла. */
+  prepare?(rig: Rig): Promise<unknown>;
   /**
    * Кадры с группой в обычный набор не входят: их снимают, назвав набор именем
    * группы или её началом до дефиса (`shots.mjs strip`, `shots.mjs strip-hypno`).
@@ -151,6 +153,7 @@ export async function runShots(rig: Rig, set: string, only?: string[]): Promise<
     if (grouped ? !inSet(shot.group) : shot.group) continue;
     const [w, h] = shot.size ?? [1280, 720];
     rig.resizeTo(w, h, 1);
+    await shot.prepare?.(rig);
     pose(rig, shot);
     rig.render();
     // Снимать холст нужно сразу после рендера, в той же задаче: потом кадр уйдёт на экран.
